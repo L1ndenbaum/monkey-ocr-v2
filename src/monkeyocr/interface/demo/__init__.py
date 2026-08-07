@@ -1,0 +1,1 @@
+"""Optional interactive MonkeyOCR demo."""

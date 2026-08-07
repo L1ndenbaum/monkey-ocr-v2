@@ -11,6 +11,27 @@ requires-python = ">=3.11,<3.12"
 license = { file = "LICENSE" }
 dependencies = []
 
+[project.optional-dependencies]
+demo = ["gradio>=5.35,<6"]
+research = [
+    "einops>=0.8,<1",
+    "huggingface-hub>=0.33,<1",
+    "modelscope>=1.27,<2",
+    "pillow>=11.2,<12",
+    "qwen-vl-utils>=0.0.11,<1",
+    "transformers>=4.51,<5",
+]
+training = ["beautifulsoup4>=4.13,<5"]
+
+[project.scripts]
+monkeyocr-demo = "monkeyocr.interface.demo.gradio:main"
+monkeyocr-model = "monkeyocr.interface.cli.model:main"
+monkeyocr-parse = "monkeyocr.interface.cli.parse:main"
+monkeyocr-understanding = "monkeyocr.interface.cli.understanding:main"
+monkeyocr-vision = "monkeyocr.interface.cli.vision:main"
+monkeyocr-vision-vitae = "monkeyocr.interface.cli.vision_vitae:main"
+monkeyocr-vllm = "monkeyocr.interface.cli.vllm:main"
+
 [dependency-groups]
 dev = [
     "mypy>=1.16,<2",
@@ -21,6 +42,10 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/monkeyocr"]
+exclude = ["src/monkeyocr/infrastructure/training/vendor/**"]
+
+[tool.hatch.build.targets.sdist]
+exclude = ["src/monkeyocr/infrastructure/training/vendor/**"]
 
 [tool.ruff]
 target-version = "py311"

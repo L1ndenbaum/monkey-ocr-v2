@@ -1,0 +1,1 @@
+"""MonkeyOCR command-line entrypoints."""

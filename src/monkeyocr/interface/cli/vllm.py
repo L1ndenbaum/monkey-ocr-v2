@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
 import argparse
+import inspect
 import json
-import os
 import socket
 import sys
-import inspect
 from pathlib import Path
 
-from modeling import modeling_monkeyocrv2_vllm  # noqa: F401
+from monkeyocr.infrastructure.modeling import monkeyocr_vllm  # noqa: F401
 from vllm.entrypoints.cli.main import main as vllm_main
 
-
-PARSING_DIR = Path(__file__).resolve().parent
+DEFAULT_MODEL_PATH = Path.cwd() / "model_weight" / "MonkeyOCRv2-B-Parsing"
 
 
 def ensure_model_path(model_path: str):
@@ -78,21 +76,22 @@ def ensure_dflash_support() -> None:
 
         source = inspect.getsource(SpeculativeConfig).lower()
     except Exception as exc:
-        raise SystemExit(f"DFlash requested but vLLM speculative config is unavailable: {exc}") from exc
+        raise SystemExit(
+            f"DFlash requested but vLLM speculative config is unavailable: {exc}"
+        ) from exc
     if "dflash" not in source:
         raise SystemExit("DFlash requested but this vLLM build does not support method=dflash")
     try:
         from vllm.v1.spec_decode.dflash import DFlashProposer  # noqa: F401
     except Exception as exc:
         raise SystemExit(
-            "DFlash requested but vLLM has no usable native DFlash proposer: "
-            f"{exc}"
+            f"DFlash requested but vLLM has no usable native DFlash proposer: {exc}"
         ) from exc
 
 
 def main():
     parser = argparse.ArgumentParser(description="Start vLLM serve for MonkeyOCRv2.")
-    parser.add_argument("--model-path", "-m", default=PARSING_DIR.parent / 'model_weight' / 'MonkeyOCRv2-B-Parsing')
+    parser.add_argument("--model-path", "-m", default=DEFAULT_MODEL_PATH)
     parser.add_argument("--tensor-parallel-size", "--tp", type=int, default=1)
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.5)
     parser.add_argument("--max-model-len", type=int, default=16384)
@@ -101,9 +100,7 @@ def main():
         "--max-num-batched-tokens",
         type=int,
         default=16384,
-        help=(
-            "Scheduler token budget; including speculative tokens."
-        ),
+        help=("Scheduler token budget; including speculative tokens."),
     )
     parser.add_argument(
         "--target-attention-backend",
@@ -111,7 +108,8 @@ def main():
         help="Target attention backend.",
     )
     parser.add_argument(
-        "--draft-model", "-d",
+        "--draft-model",
+        "-d",
         type=str,
         help="Optional local path to a MonkeyOCRv2 DFlash draft. Enables DFlash speculative decoding.",
     )
@@ -129,11 +127,15 @@ def main():
     parser.add_argument("--served-model-name", default="MonkeyOCRv2")
     parser.add_argument("--host", default=None)
     parser.add_argument("--port", "-p", type=int, default=8888)
-    parser.add_argument("extra_args", nargs=argparse.REMAINDER, help="Extra arguments passed to vLLM serve")
+    parser.add_argument(
+        "extra_args", nargs=argparse.REMAINDER, help="Extra arguments passed to vLLM serve"
+    )
     args = parser.parse_args()
 
     ensure_model_path(args.model_path)
     if args.draft_model:
+        from monkeyocr.infrastructure.modeling import monkeyocr_dflash_vllm  # noqa: F401
+
         ensure_model_path(args.draft_model)
         ensure_dflash_support()
         if args.dflash_num_speculative_tokens <= 0:
@@ -141,16 +143,13 @@ def main():
 
     ensure_port_available(args.host, args.port)
 
-    parsing_dir = Path(__file__).resolve().parent
-    os.environ["PYTHONPATH"] = str(parsing_dir) + os.pathsep + os.environ.get("PYTHONPATH", "")
-
     argv = build_vllm_argv(args)
     if args.extra_args:
         if args.extra_args[0] == "--":
             args.extra_args = args.extra_args[1:]
         argv.extend(args.extra_args)
 
-    print("Imported modeling.modeling_monkeyocrv2_vllm for vLLM model registration.")
+    print("Registered MonkeyOCRv2 model implementations for vLLM.")
     print("Running:", " ".join(argv))
     sys.argv = argv
     vllm_main()

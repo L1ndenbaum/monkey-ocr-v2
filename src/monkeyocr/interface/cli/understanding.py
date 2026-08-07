@@ -85,12 +85,16 @@ def main():
     if device == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("CUDA was requested but is not available.")
 
-    model = AutoModelForCausalLM.from_pretrained(
-        args.model_path,
-        dtype=args.dtype,
-        trust_remote_code=True,
-        attn_implementation=args.attn_implementation
-    ).eval().to(device)
+    model = (
+        AutoModelForCausalLM.from_pretrained(
+            args.model_path,
+            dtype=args.dtype,
+            trust_remote_code=True,
+            attn_implementation=args.attn_implementation,
+        )
+        .eval()
+        .to(device)
+    )
     processor = AutoProcessor.from_pretrained(args.model_path, trust_remote_code=True)
 
     messages = [
@@ -132,7 +136,7 @@ def main():
 
     with torch.no_grad():
         outputs = model.generate(**inputs, **generation_kwargs)
-        generated_ids_trimmed = outputs[0][inputs["input_ids"].shape[1]:]
+        generated_ids_trimmed = outputs[0][inputs["input_ids"].shape[1] :]
         generated_text = processor.decode(
             generated_ids_trimmed,
             skip_special_tokens=True,

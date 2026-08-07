@@ -4,7 +4,6 @@ import base64
 import os
 import re
 import shutil
-import sys
 import time
 import uuid
 from pathlib import Path
@@ -13,35 +12,34 @@ import gradio as gr
 from PIL import Image
 
 
-PARSING_DIR = Path(__file__).resolve().parents[1]
-if str(PARSING_DIR) not in sys.path:
-    sys.path.insert(0, str(PARSING_DIR))
-DEFAULT_MODEL_PATH = str(PARSING_DIR.parent / "model_weight" / "MonkeyOCRv2-B-Parsing")
-DEFAULT_OUTPUT_DIR = str(PARSING_DIR / "output" / "demo_outputs")
-EXAMPLES_DIR = Path(PARSING_DIR.parent / "images_test")
+PROJECT_ROOT = Path.cwd()
+DEFAULT_MODEL_PATH = str(PROJECT_ROOT / "model_weight" / "MonkeyOCRv2-B-Parsing")
+DEFAULT_OUTPUT_DIR = str(PROJECT_ROOT / "output" / "demo_outputs")
+EXAMPLES_DIR = PROJECT_ROOT / "examples"
 INITIAL_MARKDOWN = "Please upload a file and click Parse."
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"}
 EXAMPLE_EXTS = IMAGE_EXTS | {".pdf"}
 
 
 try:
-    from core_runner import (
-        BackendConfig,
-        PipelineConfig,
-        PDFIUM_LOCK,
+    from monkeyocr.infrastructure.pipeline.config import BackendConfig, PipelineConfig
+    from monkeyocr.infrastructure.pipeline.runner import (
         DEFAULT_BACKEND_MANAGER,
+        PDFIUM_LOCK,
         ServicePipelinePool,
-        load_all_results,
         load_pdf_images,
+        open_oriented_image,
+    )
+    from monkeyocr.infrastructure.storage.artifacts import (
+        load_all_results,
         load_markdowns,
         make_artifact_filename,
-        open_oriented_image,
         zip_dir,
     )
 except ModuleNotFoundError as exc:
     raise gr.Error(
         f"Missing dependency while loading MonkeyOCRv2-Parsing parsing pipeline: {exc.name}. "
-        "Please run this demo in the environment used by parsing/parse.py."
+        "Install the demo and selected inference extras before launching this command."
     ) from exc
 
 atexit.register(DEFAULT_BACKEND_MANAGER.close)
@@ -150,7 +148,9 @@ def _load_pdf_preview_pages(pdf_path: str):
     try:
         return load_pdf_images(pdf_path)
     except ImportError as exc:
-        raise gr.Error("PDF preview requires pypdfium2. Please install it or upload an image.") from exc
+        raise gr.Error(
+            "PDF preview requires pypdfium2. Please install it or upload an image."
+        ) from exc
 
 
 def _load_image_preview(image_path: str):
@@ -273,7 +273,9 @@ def _load_example_preview(file_path: str, max_size=(260, 180)):
         try:
             import pypdfium2 as pdfium
         except Exception as exc:
-            raise gr.Error("PDF preview requires pypdfium2. Please install it or upload an image.") from exc
+            raise gr.Error(
+                "PDF preview requires pypdfium2. Please install it or upload an image."
+            ) from exc
 
         with PDFIUM_LOCK:
             pdf = pdfium.PdfDocument(file_path)
@@ -401,13 +403,16 @@ def _markdown_for_preview(md_text: str, md_dir: Path) -> str:
 
 def _contains_arabic(text: str) -> bool:
     text = re.sub(r"data:image/[^;\s)]+;base64,[A-Za-z0-9+/=]+", "", text or "")
-    arabic_chars = re.findall(r"[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff\ufb50-\ufdff\ufe70-\ufeff]", text or "")
+    arabic_chars = re.findall(
+        r"[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff\ufb50-\ufdff\ufe70-\ufeff]", text or ""
+    )
     letters = re.findall(r"[^\W\d_]", text, flags=re.UNICODE)
     if not arabic_chars:
         return False
     if not letters:
         return True
     return len(arabic_chars) / max(len(letters), 1) >= 0.2
+
 
 def _markdown_preview_updates(md_preview: str, md_text: str = None):
     if _contains_arabic(md_text):
@@ -432,12 +437,15 @@ def parse_file(
     max_pages=20,
 ):
     file_path = session_state.get("file_path") or file_path
-    file_path = _copy_input_to_run_dir(
-        file_path, session_state, output_dir, max_pages=max_pages
-    ) or file_path
+    file_path = (
+        _copy_input_to_run_dir(file_path, session_state, output_dir, max_pages=max_pages)
+        or file_path
+    )
 
     if file_path is None:
-        md_preview_ltr, md_preview_rtl = _markdown_preview_updates("Please upload a PDF or image first.")
+        md_preview_ltr, md_preview_rtl = _markdown_preview_updates(
+            "Please upload a PDF or image first."
+        )
         return (
             gr.update(),
             md_preview_ltr,
@@ -456,7 +464,11 @@ def parse_file(
     if input_path.suffix.lower() not in EXAMPLE_EXTS:
         raise gr.Error("Unsupported file type. Please upload PDF or image files.")
     session_state["file_path"] = file_path
-    run_dir = Path(session_state["run_dir"]).resolve() if session_state.get("run_dir") else _create_run_dir(input_path, session_state, output_dir)
+    run_dir = (
+        Path(session_state["run_dir"]).resolve()
+        if session_state.get("run_dir")
+        else _create_run_dir(input_path, session_state, output_dir)
+    )
     result_info = service_pool.run(
         PipelineConfig(
             input_path=str(input_path),
@@ -510,12 +522,15 @@ def recognize_single_task(
     max_pages=20,
 ):
     file_path = session_state.get("file_path") or file_path
-    file_path = _copy_input_to_run_dir(
-        file_path, session_state, output_dir, max_pages=max_pages
-    ) or file_path
+    file_path = (
+        _copy_input_to_run_dir(file_path, session_state, output_dir, max_pages=max_pages)
+        or file_path
+    )
 
     if file_path is None:
-        md_preview_ltr, md_preview_rtl = _markdown_preview_updates("Please upload a PDF or image first.")
+        md_preview_ltr, md_preview_rtl = _markdown_preview_updates(
+            "Please upload a PDF or image first."
+        )
         return (
             gr.update(),
             md_preview_ltr,
@@ -533,7 +548,11 @@ def recognize_single_task(
         raise gr.Error("Unsupported file type. Please upload PDF or image files.")
 
     session_state["file_path"] = file_path
-    run_dir = Path(session_state["run_dir"]).resolve() if session_state.get("run_dir") else _create_run_dir(input_path, session_state, output_dir)
+    run_dir = (
+        Path(session_state["run_dir"]).resolve()
+        if session_state.get("run_dir")
+        else _create_run_dir(input_path, session_state, output_dir)
+    )
     result_info = service_pool.run_single_task(
         str(input_path),
         str(run_dir),
@@ -677,7 +696,9 @@ def create_gradio_app(
                 with gr.Row():
                     with gr.Column(scale=3):
                         gr.Markdown("### File Preview")
-                        file_preview = gr.Image(label="Preview", visible=True, height=800, show_label=False)
+                        file_preview = gr.Image(
+                            label="Preview", visible=True, height=800, show_label=False
+                        )
                         with gr.Row():
                             prev_btn = gr.Button("Previous")
                             page_info = gr.HTML(value=_page_info(), elem_id="page_info_html")
@@ -778,7 +799,16 @@ def create_gradio_app(
                 max_pages=max_pages,
             ),
             inputs=[file_input, session_state, keep_header_footer],
-            outputs=[file_preview, md_view_ltr, md_view_rtl, md_raw, page_info, zip_download, json_download, session_state],
+            outputs=[
+                file_preview,
+                md_view_ltr,
+                md_view_rtl,
+                md_raw,
+                page_info,
+                zip_download,
+                json_download,
+                session_state,
+            ],
             show_progress=True,
             show_progress_on=[md_view_ltr, md_view_rtl, md_raw],
         )
@@ -793,7 +823,16 @@ def create_gradio_app(
                 max_pages=max_pages,
             ),
             inputs=[file_input, session_state, task_dropdown],
-            outputs=[file_preview, md_view_ltr, md_view_rtl, md_raw, page_info, zip_download, json_download, session_state],
+            outputs=[
+                file_preview,
+                md_view_ltr,
+                md_view_rtl,
+                md_raw,
+                page_info,
+                zip_download,
+                json_download,
+                session_state,
+            ],
             show_progress=True,
             show_progress_on=[md_view_ltr, md_view_rtl, md_raw],
         )
@@ -822,23 +861,97 @@ def create_gradio_app(
 
 def main():
     parser = argparse.ArgumentParser(description="Start the MonkeyOCRv2 Gradio demo.")
-    parser.add_argument("--model-path", default=DEFAULT_MODEL_PATH, help="Path to the MonkeyOCRv2 model weights used by local Async engine and preprocessor.")
-    parser.add_argument("--output-dir", "-o", default=DEFAULT_OUTPUT_DIR, help="Directory where demo request outputs are saved.")
-    parser.add_argument("--server-url", "-s", dest="server_url", default="", help="vLLM OpenAI-compatible server URL, for example http://127.0.0.1:8888. If omitted, local AsyncLLMEngine is used.")
-    parser.add_argument("--served-model-name", default="MonkeyOCRv2", help="Model name exposed by vLLM serve.")
-    parser.add_argument("--request-timeout", type=int, default=300, help="HTTP request timeout in seconds when using vLLM serve.")
-    parser.add_argument("--http-max-retries", type=int, default=5, help="Maximum retries for transient vLLM server HTTP failures.")
-    parser.add_argument("--http-retry-backoff", type=float, default=1.0, help="Base exponential backoff seconds for transient vLLM server HTTP failures.")
-    parser.add_argument("--server-max-inflight", type=int, default=1024, help="Maximum in-flight model requests submitted by the demo process.")
-    parser.add_argument("--page-max-inflight", type=int, default=256, help="Maximum pages kept in the parsing pipeline at the same time.")
-    parser.add_argument("--preprocess-batch-size", type=int, default=32, help="Batch size used by the image preprocessor.")
-    parser.add_argument("--preprocess-wait-seconds", type=float, default=float(os.getenv("MOCR2_PREPROCESS_WAIT_SECONDS", "1.0")), help="Maximum seconds to wait for a service preprocess batch to fill.")
-    parser.add_argument("--demo-concurrency", type=int, default=int(os.getenv("MOCR2_DEMO_CONCURRENCY", "16")), help="Maximum number of Gradio event handlers running concurrently.")
-    parser.add_argument("--max-pages", type=int, default=20, help="Maximum PDF pages copied and parsed per request. No limit is applied to image inputs.")
-    parser.add_argument("--skip-preprocess", action="store_true", help="Skip image preprocessing before layout and recognition.")
-    parser.add_argument("--end2end", action="store_true", help="Use end-to-end parsing prompt instead of layout followed by block recognition.")
-    parser.add_argument("--demo-server-name", default="0.0.0.0", help="Host address for the Gradio demo server.")
-    parser.add_argument("--demo-server-port", "-p", type=int, default=8891, help="Port for the Gradio demo server.")
+    parser.add_argument(
+        "--model-path",
+        default=DEFAULT_MODEL_PATH,
+        help="Path to the MonkeyOCRv2 model weights used by local Async engine and preprocessor.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        "-o",
+        default=DEFAULT_OUTPUT_DIR,
+        help="Directory where demo request outputs are saved.",
+    )
+    parser.add_argument(
+        "--server-url",
+        "-s",
+        dest="server_url",
+        default="",
+        help="vLLM OpenAI-compatible server URL, for example http://127.0.0.1:8888. If omitted, local AsyncLLMEngine is used.",
+    )
+    parser.add_argument(
+        "--served-model-name", default="MonkeyOCRv2", help="Model name exposed by vLLM serve."
+    )
+    parser.add_argument(
+        "--request-timeout",
+        type=int,
+        default=300,
+        help="HTTP request timeout in seconds when using vLLM serve.",
+    )
+    parser.add_argument(
+        "--http-max-retries",
+        type=int,
+        default=5,
+        help="Maximum retries for transient vLLM server HTTP failures.",
+    )
+    parser.add_argument(
+        "--http-retry-backoff",
+        type=float,
+        default=1.0,
+        help="Base exponential backoff seconds for transient vLLM server HTTP failures.",
+    )
+    parser.add_argument(
+        "--server-max-inflight",
+        type=int,
+        default=1024,
+        help="Maximum in-flight model requests submitted by the demo process.",
+    )
+    parser.add_argument(
+        "--page-max-inflight",
+        type=int,
+        default=256,
+        help="Maximum pages kept in the parsing pipeline at the same time.",
+    )
+    parser.add_argument(
+        "--preprocess-batch-size",
+        type=int,
+        default=32,
+        help="Batch size used by the image preprocessor.",
+    )
+    parser.add_argument(
+        "--preprocess-wait-seconds",
+        type=float,
+        default=float(os.getenv("MOCR2_PREPROCESS_WAIT_SECONDS", "1.0")),
+        help="Maximum seconds to wait for a service preprocess batch to fill.",
+    )
+    parser.add_argument(
+        "--demo-concurrency",
+        type=int,
+        default=int(os.getenv("MOCR2_DEMO_CONCURRENCY", "16")),
+        help="Maximum number of Gradio event handlers running concurrently.",
+    )
+    parser.add_argument(
+        "--max-pages",
+        type=int,
+        default=20,
+        help="Maximum PDF pages copied and parsed per request. No limit is applied to image inputs.",
+    )
+    parser.add_argument(
+        "--skip-preprocess",
+        action="store_true",
+        help="Skip image preprocessing before layout and recognition.",
+    )
+    parser.add_argument(
+        "--end2end",
+        action="store_true",
+        help="Use end-to-end parsing prompt instead of layout followed by block recognition.",
+    )
+    parser.add_argument(
+        "--demo-server-name", default="0.0.0.0", help="Host address for the Gradio demo server."
+    )
+    parser.add_argument(
+        "--demo-server-port", "-p", type=int, default=8891, help="Port for the Gradio demo server."
+    )
     parser.add_argument("--share", action="store_true", help="Create a public Gradio share link.")
     args = parser.parse_args()
 

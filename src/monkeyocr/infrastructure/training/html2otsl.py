@@ -32,6 +32,7 @@ _CELL_RE = re.compile(
 
 def _protect_cell_whitespace(source: str) -> str:
     """Protect repeated whitespace that BeautifulSoup's HTML parser collapses."""
+
     def repl(match: re.Match[str]) -> str:
         inner = match.group(2)
         # Only alter text between tags; whitespace in attributes is markup.
@@ -39,6 +40,7 @@ def _protect_cell_whitespace(source: str) -> str:
         for i in range(0, len(pieces), 2):
             pieces[i] = "".join(chr(_WS_BASE + ord(ch)) if ch.isspace() else ch for ch in pieces[i])
         return match.group(1) + "".join(pieces) + match.group(3)
+
     return _CELL_RE.sub(repl, source)
 
 
@@ -63,7 +65,9 @@ def _cell_text(cell) -> str:
     # meaningful text cells and must not collapse into <ecel>.
     # Markup is intentionally discarded; only its text nodes remain.
     text = cell.get_text("", strip=False)
-    return "".join(chr(ord(ch) - _WS_BASE) if _WS_BASE <= ord(ch) < _WS_BASE + 0x1000 else ch for ch in text)
+    return "".join(
+        chr(ord(ch) - _WS_BASE) if _WS_BASE <= ord(ch) < _WS_BASE + 0x1000 else ch for ch in text
+    )
 
 
 def html_to_otsl(source: str) -> str:
@@ -142,18 +146,62 @@ html_to_ostl = html_to_otsl
 # entities, headers, all span combinations, malformed attributes and input
 # without a table.
 TEST_CASES = [
-    ("basic 2x2", "<table><tr><td>A</td><td>B</td></tr><tr><td>C</td><td>D</td></tr></table>", "<fcel>A<fcel>B<nl><fcel>C<fcel>D<nl>"),
-    ("headers and nested markup", "<table><thead><tr><th><b>Name</b></th><th>Value</th></tr></thead><tbody><tr><td>x</td><td><em>1</em></td></tr></tbody></table>", "<fcel>Name<fcel>Value<nl><fcel>x<fcel>1<nl>"),
-    ("empty and whitespace cells", "<table><tr><td></td><td>   </td><th>\n</th></tr></table>", "<ecel><fcel>   <fcel>\n<nl>"),
-    ("exact whitespace", "<table><tr><td>  A  </td><td>\t\t</td><td>\n\n</td></tr></table>", "<fcel>  A  <fcel>\t\t<fcel>\n\n<nl>"),
-    ("whitespace and entities", "<table><tr><td>  A\n B </td><td>&amp; &lt;x&gt;</td></tr></table>", "<fcel>  A\n B <fcel>& <x><nl>"),
-    ("colspan", "<table><tr><td colspan='3'>Head</td></tr><tr><td>A</td><td>B</td><td>C</td></tr></table>", "<fcel>Head<lcel><lcel><nl><fcel>A<fcel>B<fcel>C<nl>"),
-    ("rowspan", "<table><tr><td rowspan='2'>Side</td><td>A</td></tr><tr><td>B</td></tr></table>", "<fcel>Side<fcel>A<nl><ucel><fcel>B<nl>"),
-    ("rowspan + colspan", "<table><tr><td rowspan='2' colspan='2'>Big</td><td>A</td></tr><tr><td>B</td></tr></table>", "<fcel>Big<lcel><fcel>A<nl><ucel><xcel><fcel>B<nl>"),
-    ("two independent rowspans", "<table><tr><td rowspan='3'>A</td><td rowspan='2'>B</td><td>C</td></tr><tr><td>D</td></tr><tr><td>E</td></tr></table>", "<fcel>A<fcel>B<fcel>C<nl><ucel><ucel><fcel>D<nl><ucel><fcel>E<nl>"),
-    ("invalid span values", "<table><tr><td colspan='0' rowspan='nope'>X</td><td>Y</td></tr></table>", "<fcel>X<fcel>Y<nl>"),
+    (
+        "basic 2x2",
+        "<table><tr><td>A</td><td>B</td></tr><tr><td>C</td><td>D</td></tr></table>",
+        "<fcel>A<fcel>B<nl><fcel>C<fcel>D<nl>",
+    ),
+    (
+        "headers and nested markup",
+        "<table><thead><tr><th><b>Name</b></th><th>Value</th></tr></thead><tbody><tr><td>x</td><td><em>1</em></td></tr></tbody></table>",
+        "<fcel>Name<fcel>Value<nl><fcel>x<fcel>1<nl>",
+    ),
+    (
+        "empty and whitespace cells",
+        "<table><tr><td></td><td>   </td><th>\n</th></tr></table>",
+        "<ecel><fcel>   <fcel>\n<nl>",
+    ),
+    (
+        "exact whitespace",
+        "<table><tr><td>  A  </td><td>\t\t</td><td>\n\n</td></tr></table>",
+        "<fcel>  A  <fcel>\t\t<fcel>\n\n<nl>",
+    ),
+    (
+        "whitespace and entities",
+        "<table><tr><td>  A\n B </td><td>&amp; &lt;x&gt;</td></tr></table>",
+        "<fcel>  A\n B <fcel>& <x><nl>",
+    ),
+    (
+        "colspan",
+        "<table><tr><td colspan='3'>Head</td></tr><tr><td>A</td><td>B</td><td>C</td></tr></table>",
+        "<fcel>Head<lcel><lcel><nl><fcel>A<fcel>B<fcel>C<nl>",
+    ),
+    (
+        "rowspan",
+        "<table><tr><td rowspan='2'>Side</td><td>A</td></tr><tr><td>B</td></tr></table>",
+        "<fcel>Side<fcel>A<nl><ucel><fcel>B<nl>",
+    ),
+    (
+        "rowspan + colspan",
+        "<table><tr><td rowspan='2' colspan='2'>Big</td><td>A</td></tr><tr><td>B</td></tr></table>",
+        "<fcel>Big<lcel><fcel>A<nl><ucel><xcel><fcel>B<nl>",
+    ),
+    (
+        "two independent rowspans",
+        "<table><tr><td rowspan='3'>A</td><td rowspan='2'>B</td><td>C</td></tr><tr><td>D</td></tr><tr><td>E</td></tr></table>",
+        "<fcel>A<fcel>B<fcel>C<nl><ucel><ucel><fcel>D<nl><ucel><fcel>E<nl>",
+    ),
+    (
+        "invalid span values",
+        "<table><tr><td colspan='0' rowspan='nope'>X</td><td>Y</td></tr></table>",
+        "<fcel>X<fcel>Y<nl>",
+    ),
     ("no table", "<div><p>not a table</p></div>", ""),
-    ("multiple tables uses first", "<table><tr><td>first</td></tr></table><table><tr><td>second</td></tr></table>", "<fcel>first<nl>"),
+    (
+        "multiple tables uses first",
+        "<table><tr><td>first</td></tr></table><table><tr><td>second</td></tr></table>",
+        "<fcel>first<nl>",
+    ),
 ]
 
 
@@ -185,27 +233,22 @@ def convert_jsonl(input_path: Path, output_path: Path) -> int:
     number. The return value is the number of converted assistant messages.
     """
     converted = 0
-    with input_path.open("r", encoding="utf-8") as source, output_path.open(
-        "w", encoding="utf-8"
-    ) as destination:
+    with (
+        input_path.open("r", encoding="utf-8") as source,
+        output_path.open("w", encoding="utf-8") as destination,
+    ):
         for line_number, line in enumerate(source, 1):
             if not line.strip():
                 continue
             try:
                 record = json.loads(line)
             except json.JSONDecodeError as exc:
-                raise ValueError(
-                    f"{input_path}:{line_number}: invalid JSON: {exc.msg}"
-                ) from exc
+                raise ValueError(f"{input_path}:{line_number}: invalid JSON: {exc.msg}") from exc
             if not isinstance(record, dict):
-                raise ValueError(
-                    f"{input_path}:{line_number}: each line must be a JSON object"
-                )
+                raise ValueError(f"{input_path}:{line_number}: each line must be a JSON object")
             messages = record.get("messages")
             if not isinstance(messages, list):
-                raise ValueError(
-                    f'{input_path}:{line_number}: field "messages" must be a list'
-                )
+                raise ValueError(f'{input_path}:{line_number}: field "messages" must be a list')
             assistant_count = 0
             for message_index, message in enumerate(messages):
                 if not isinstance(message, dict):
@@ -220,14 +263,12 @@ def convert_jsonl(input_path: Path, output_path: Path) -> int:
                 if not isinstance(content, str):
                     raise ValueError(
                         f"{input_path}:{line_number}: "
-                        f'messages[{message_index}].content must be a string'
+                        f"messages[{message_index}].content must be a string"
                     )
                 message["content"] = html_to_otsl(content)
                 converted += 1
             if assistant_count == 0:
-                raise ValueError(
-                    f"{input_path}:{line_number}: no assistant message found"
-                )
+                raise ValueError(f"{input_path}:{line_number}: no assistant message found")
 
             destination.write(json.dumps(record, ensure_ascii=False) + "\n")
     return converted
@@ -239,7 +280,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     parser.add_argument("-i", "--input", type=Path, help="input HTML JSONL file")
     parser.add_argument("-o", "--output", type=Path, help="output OTSL JSONL file")
-    parser.add_argument("-test", "--test", action="store_true", help="print and run all built-in test cases")
+    parser.add_argument(
+        "-test", "--test", action="store_true", help="print and run all built-in test cases"
+    )
     args = parser.parse_args(argv)
     if args.test:
         return run_tests()
