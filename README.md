@@ -217,159 +217,159 @@ After processing and compression, downloading the dataset currently requires app
   </tbody>
 </table>
 
-## Quick Start
-### Vision Encoder
-#### 1. Install
-Install transformers and flash attention:
-```bash
-conda create -n MonkeyOCRv2 python=3.11
-conda activate MonkeyOCRv2
-pip install torch==2.8.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu126
-pip install transformers==4.57.1
-pip install accelerate==1.11.0
-pip install qwen_vl_utils==0.0.14
-pip install flash-attn==2.8.3 --no-build-isolation
-```
-#### 2. Download Model Weights
-Download our model from Huggingface.
-```bash
-python download_model.py -n MonkeyOCRv2-B # or MonkeyOCRv2-S / MonkeyOCRv2-AS
-```
-You can also download our model from ModelScope.
+## Public OCR Service Quick Start
 
-```bash
-pip install modelscope
-python download_model.py -t modelscope -n MonkeyOCRv2-B # or MonkeyOCRv2-S / MonkeyOCRv2-AS
-```
-#### 3. Extract Image Feature
-```bash
-cd vision
-# For MonkeyOCRv2-B and MonkeyOCRv2-S
-python extract_feature.py -m ../model_weight/MonkeyOCRv2-B -i ../images_test/ar.JPEG
-# For MonkeyOCRv2-AS
-python extract_feature_vitae.py -m ../model_weight/MonkeyOCRv2-AS -i ../images_test/ar.JPEG
+This fork packages MonkeyOCRv2 as a single bounded context with a layer-first
+DDD structure under `src/monkeyocr`:
+
+```text
+src/monkeyocr/
+├── domain/          # framework-free OCR rules and result values
+├── application/     # use cases and outbound ports
+├── infrastructure/  # vLLM, preprocessing, storage, and training adapters
+└── interface/       # HTTP v1, CLI, and optional demo entrypoints
 ```
 
-### Document Parsing
-#### 1. Install
-Install vLLM following its [official guide](https://docs.vllm.ai/en/v0.11.2/getting_started/installation/gpu/):
-```bash
-conda create -n MonkeyOCRv2Parsing python=3.11
-conda activate MonkeyOCRv2Parsing
-pip install uv
-uv pip install vllm --extra-index-url https://wheels.vllm.ai/0.25.1/cu129 --extra-index-url https://download.pytorch.org/whl/cu129 -i https://pypi.tuna.tsinghua.edu.cn/simple
-pip install -r parsing/requirements.txt
-```
-To use DFlash for faster inference, **vLLM 0.25.1** is required, which depends on **CUDA 12.9 or later**.
+The public deployment is two GPU containers behind a host Nginx process:
 
-If your system does not support CUDA 12.9, you can instead install **vLLM 0.11.2** (without DFlash support) by running:
-
-```bash
-uv pip install vllm==0.11.2 --torch-backend=auto -i https://pypi.tuna.tsinghua.edu.cn/simple requests
+```text
+Internet -> Nginx :443 -> 127.0.0.1:8000 API -> internal vLLM :8888
 ```
 
-Inference will still work normally, but DFlash acceleration will not be available.
+The API port is never bound publicly, vLLM has no host port, and every
+`/api/v1` request (including artifact downloads) requires the one configured
+Bearer token.
 
+### 1. Initialize local configuration
 
-#### 2. Download Model Weights
-Download our model from Huggingface.
-```bash
-python download_model.py -n MonkeyOCRv2-B-Parsing # or MonkeyOCRv2-S-Parsing
-# use DFlash for faster inference, support MonkeyOCRv2-B-Parsing only for now
-python download_model.py -n MonkeyOCRv2-B-Parsing-DFlash
-```
-You can also download our model from ModelScope.
+Requirements are Docker with Compose, the NVIDIA Container Toolkit, an NVIDIA
+GPU supported by CUDA 12.9, and `openssl` for generating the local secret.
 
 ```bash
-pip install modelscope
-python download_model.py -t modelscope -n MonkeyOCRv2-B-Parsing # or MonkeyOCRv2-S-Parsing
-# use DFlash for faster inference, support MonkeyOCRv2-B-Parsing only for now
-python download_model.py -n MonkeyOCRv2-B-Parsing-DFlash
+scripts/compose.sh init
 ```
 
-#### 3. vLLM Serving
-You should start a vLLM service before parsing documents:
-```bash
-cd parsing
-# Serve with DFlash for faster inference
-python serve.py -m ../model_weight/MonkeyOCRv2-B-Parsing -d ../model_weight/MonkeyOCRv2-B-Parsing-DFlash -p 8888
-# Serve without DFlash
-python serve.py -m ../model_weight/MonkeyOCRv2-B-Parsing  -p 8888
-# Show help messages
-python serve.py -h
+This copies tracked examples to ignored `dotenv/.env.*` files, creates a
+0600 Bearer token at `dotenv/secrets/monkeyocr_api_token`, and creates local
+model/result directories. Build proxies are already configured in
+`dotenv/.env.build` as:
+
+```dotenv
+HTTP_PROXY=http://host.docker.internal:9090
+HTTPS_PROXY=http://host.docker.internal:9090
 ```
 
-#### 4. Inference
-You can parse documents using CLI or serve with demo and FastAPI.
+Both Docker build and runtime configuration add
+`host.docker.internal:host-gateway`; the wrapper does not rewrite proxy URLs.
+Edit `dotenv/.env.compose`, `dotenv/.env.api`, and `dotenv/.env.vllm` for the
+server before building.
 
-##### 4.1 Parse using CLI
-Parse a single document or a directory containing PDFs or images:
-```bash
-cd parsing
-python parse.py \
-    -i ../images_test \
-    -o output/test \
-    -s http://127.0.0.1:8888 \
-    --draw-layout \
-    --skip-processed
-# Show help messages
-python parse.py -h
-```
-
-##### 4.2 Serve with Web Demo
-```bash
-cd parsing
-python demo/gradio_demo.py -s http://127.0.0.1:8888 -p 8891
-# Show help messages
-python demo/gradio_demo.py -h
-```
-You can access the web demo at http://localhost:8891.
-
-##### 4.3 Serve with FastAPI
-```bash
-cd parsing
-python fastapi/main.py -s http://127.0.0.1:8888 -p 8000
-# Show help messages
-python fastapi/main.py -h
-```
-You can access the API documentation at http://localhost:8000/docs to explore available endpoints.
-
-#### 5. Fine-tune
-You can fine-tune MonkeyOCRv2-Parsing with your own data, please reffer to the [training part](https://github.com/Yuliang-Liu/MonkeyOCRv2/tree/main/parsing/train).
-
-### Document Understanding
-#### 1. Install
-See install part of MonkeyOCRv2.
-
-#### 2. Download Model Weights
-Download our model from Huggingface.
-```bash
-python download_model.py -n MonkeyOCRv2-B-Und # or MonkeyOCRv2-S-Und
-```
-You can also download our model from ModelScope.
+### 2. Download model weights
 
 ```bash
-pip install modelscope
-python download_model.py -t modelscope -n MonkeyOCRv2-B-Und # or MonkeyOCRv2-S-Und
+uv run --extra research monkeyocr-model -n MonkeyOCRv2-B-Parsing
 ```
-#### 3. Inference
+
+The default mount expects the target model at
+`model_weight/MonkeyOCRv2-B-Parsing`. For DFlash also download the draft:
+
 ```bash
-cd understanding
-python infer.py \
-    -m ../model_weight/MonkeyOCRv2-B-Und \
-    -i ../images_test/vqa.png \
-    -q 'What is the serving size?'
-# Show help messages
-python infer.py -h
+uv run --extra research monkeyocr-model -n MonkeyOCRv2-B-Parsing-DFlash
 ```
+
+Then set `MONKEYOCR_PROFILE=dflash` in `dotenv/.env.compose` and set
+`MONKEYOCR_DRAFT_MODEL_PATH=/models/MonkeyOCRv2-B-Parsing-DFlash` in
+`dotenv/.env.vllm`. The default `standard` profile uses vLLM 0.11.2; DFlash
+uses vLLM 0.25.1. These extras are deliberately mutually exclusive.
+
+### 3. Build and run
+
+```bash
+scripts/compose.sh build
+scripts/compose.sh up -d
+scripts/compose.sh ps
+```
+
+The Dockerfile uses pinned CUDA and uv base images. apt metadata, uv's managed
+Python download, and Python packages all use BuildKit cache mounts. The API is
+available only at `127.0.0.1:8000` until host Nginx is installed.
+
+### 4. Call the authenticated API
+
+```bash
+TOKEN=$(<dotenv/secrets/monkeyocr_api_token)
+
+curl -fsS \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@/path/to/document.pdf" \
+  http://127.0.0.1:8000/api/v1/parse
+```
+
+Public routes are:
+
+- `POST /api/v1/parse` for PDF or image parsing.
+- `POST /api/v1/ocr/{task}` where `task` is `text`, `formula`, or `table`.
+- `GET /api/v1/artifacts/{request_id}/download` for the protected ZIP.
+
+JSON responses use one envelope:
+
+```json
+{
+  "internal_code": "SUCCESS",
+  "message": "Document parsed successfully.",
+  "data": {
+    "request_id": "...",
+    "files": ["..."],
+    "artifact_download_url": "/api/v1/artifacts/.../download"
+  }
+}
+```
+
+The API streams uploads with an actual 50 MiB limit, accepts at most 50 PDF
+pages, admits four OCR requests at once (excess requests receive HTTP 429), and
+expires result workspaces after six hours. `/static` and the old unversioned
+routes do not exist.
+
+### 5. Enable HTTPS on a public IP
+
+Let’s Encrypt IP certificates require Certbot 5.4 or newer, the `shortlived`
+profile, and a reachable HTTP-01 challenge on port 80. Edit
+`dotenv/.env.nginx`, then run on the server:
+
+```bash
+sudo scripts/install-host-nginx.sh
+```
+
+The installer first loads an HTTP-only Nginx configuration, obtains the IP
+certificate with Certbot webroot mode, then enables the TLS default server.
+The final proxy exposes only `/api/v1`, applies a 50 MiB body limit, four
+connections per source IP, and a 10 requests/minute rate limit. A systemd timer
+renews the roughly six-day certificate every 12 hours, reloads Nginx after a
+successful renewal, and fails loudly if fewer than 48 hours remain.
+
+See `docs/deployment.md` for prerequisites, verification, and renewal checks.
+
+### Local CLI and research capabilities
+
+The old script paths were replaced with package entrypoints:
+
+```bash
+uv run --extra inference --extra standard monkeyocr-vllm
+uv run --extra inference --extra standard monkeyocr-parse --help
+uv run --extra demo --extra inference --extra standard monkeyocr-demo --help
+uv run --extra research monkeyocr-vision --help
+uv run --extra research monkeyocr-understanding --help
+```
+
+Training utilities live under `src/monkeyocr/infrastructure/training`. The
+vendored ms-swift checkout remains at
+`src/monkeyocr/infrastructure/training/vendor/ms-swift`, keeps its own setup and
+requirements, and is excluded from the root package, production image, and
+root quality checks.
 
 ## Visualization
 
 Our model supports robust document parsing in real-world scenarios across 17 languages, including Simplified Chinese (ZH), Traditional Chinese (ZH-T), English (EN), Arabic (AR), German (DE), Spanish (ES), French (FR), Hindi (HI), Indonesian (ID), Italian (IT), Japanese (JP), Korean (KO), Dutch (NL), Portuguese (PT), Russian (RU), Thai (TH), and Vietnamese (VI).
-
-<p align="center">
-  <img src="asserts/Visualization.gif?raw=true" width="600"/>
-</p>
 
 ## Evaluation Results
 

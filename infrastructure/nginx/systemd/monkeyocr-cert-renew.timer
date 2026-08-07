@@ -1,0 +1,12 @@
+[Unit]
+Description=Renew the MonkeyOCR IP certificate every 12 hours
+
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=12h
+RandomizedDelaySec=30min
+Persistent=true
+Unit=monkeyocr-cert-renew.service
+
+[Install]
+WantedBy=timers.target

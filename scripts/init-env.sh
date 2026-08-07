@@ -4,7 +4,7 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 dotenv_dir="$repo_root/dotenv"
 
-for role in build compose api vllm; do
+for role in build compose api vllm nginx; do
     destination="$dotenv_dir/.env.$role"
     if [[ ! -e "$destination" ]]; then
         cp "$destination.example" "$destination"
