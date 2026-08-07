@@ -20,6 +20,16 @@ dependencies = [
 
 [project.optional-dependencies]
 demo = ["gradio>=5.35,<6"]
+dflash = ["vllm==0.25.1"]
+inference = [
+    "numpy>=1.26,<3",
+    "opencv-python-headless>=4.10,<5",
+    "pillow>=11.2,<12",
+    "pypdfium2>=4.30,<5",
+    "requests>=2.32,<3",
+    "timm>=1.0,<2",
+    "tqdm>=4.67,<5",
+]
 research = [
     "einops>=0.8,<1",
     "huggingface-hub>=0.33,<1",
@@ -28,6 +38,7 @@ research = [
     "qwen-vl-utils>=0.0.11,<1",
     "transformers>=4.51,<5",
 ]
+standard = ["vllm==0.11.2"]
 training = ["beautifulsoup4>=4.13,<5"]
 
 [project.scripts]
@@ -50,6 +61,14 @@ dev = [
     "types-aiofiles>=24.1,<25",
     "types-requests>=2.32,<3",
 ]
+
+[tool.uv]
+conflicts = [
+    [{ extra = "standard" }, { extra = "dflash" }],
+    [{ extra = "dflash" }, { extra = "research" }],
+    [{ extra = "dflash" }, { extra = "demo" }],
+]
+environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/monkeyocr"]

@@ -1,0 +1,80 @@
+name: ${COMPOSE_PROJECT_NAME:-monkeyocr}
+
+x-monkeyocr-build: &monkeyocr-build
+  context: .
+  dockerfile: infrastructure/docker/Dockerfile
+  args:
+    INFERENCE_PROFILE: ${MONKEYOCR_PROFILE:-standard}
+    HTTP_PROXY: ${HTTP_PROXY:-}
+    HTTPS_PROXY: ${HTTPS_PROXY:-}
+    NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,api,vllm}
+    UV_INDEX_URL: ${UV_INDEX_URL:-https://pypi.org/simple}
+  extra_hosts:
+    - host.docker.internal:host-gateway
+
+x-monkeyocr-service: &monkeyocr-service
+  image: monkeyocr:${MONKEYOCR_PROFILE:-standard}
+  build: *monkeyocr-build
+  restart: unless-stopped
+  init: true
+  user: ${MONKEYOCR_UID:-1000}:${MONKEYOCR_GID:-1000}
+  extra_hosts:
+    - host.docker.internal:host-gateway
+  gpus: all
+  shm_size: 8gb
+  read_only: true
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,size=1g
+  logging:
+    driver: json-file
+    options:
+      max-size: 20m
+      max-file: "3"
+
+services:
+  vllm:
+    <<: *monkeyocr-service
+    command: ["monkeyocr-vllm"]
+    env_file:
+      - ./dotenv/.env.vllm
+    volumes:
+      - ${MONKEYOCR_MODEL_ROOT:-./model_weight}:/models:ro
+    expose:
+      - "8888"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8888/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 40
+      start_period: 120s
+
+  api:
+    <<: *monkeyocr-service
+    command: ["monkeyocr-api"]
+    env_file:
+      - ./dotenv/.env.api
+    depends_on:
+      vllm:
+        condition: service_healthy
+    ports:
+      - 127.0.0.1:${MONKEYOCR_API_HOST_PORT:-8000}:8000
+    volumes:
+      - ${MONKEYOCR_MODEL_ROOT:-./model_weight}:/models:ro
+      - ${MONKEYOCR_RESULTS_ROOT:-./output/api}:/var/lib/monkeyocr/results
+    secrets:
+      - source: monkeyocr_api_token
+        target: monkeyocr_api_token
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/internal/health/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+
+secrets:
+  monkeyocr_api_token:
+    file: ${MONKEYOCR_TOKEN_SECRET_FILE:-./dotenv/secrets/monkeyocr_api_token}

@@ -1,0 +1,15 @@
+.git
+.github
+.venv
+.mypy_cache
+.pytest_cache
+.ruff_cache
+__pycache__
+*.py[cod]
+*.log
+dotenv/.env*
+dotenv/secrets
+model_weight
+output
+tests
+src/monkeyocr/infrastructure/training/vendor

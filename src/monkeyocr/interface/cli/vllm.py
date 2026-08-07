@@ -2,6 +2,7 @@
 import argparse
 import inspect
 import json
+import os
 import socket
 import sys
 from pathlib import Path
@@ -9,7 +10,10 @@ from pathlib import Path
 from monkeyocr.infrastructure.modeling import monkeyocr_vllm  # noqa: F401
 from vllm.entrypoints.cli.main import main as vllm_main
 
-DEFAULT_MODEL_PATH = Path.cwd() / "model_weight" / "MonkeyOCRv2-B-Parsing"
+DEFAULT_MODEL_PATH = os.getenv(
+    "MONKEYOCR_MODEL_PATH",
+    str(Path.cwd() / "model_weight" / "MonkeyOCRv2-B-Parsing"),
+)
 
 
 def ensure_model_path(model_path: str):
@@ -92,14 +96,31 @@ def ensure_dflash_support() -> None:
 def main():
     parser = argparse.ArgumentParser(description="Start vLLM serve for MonkeyOCRv2.")
     parser.add_argument("--model-path", "-m", default=DEFAULT_MODEL_PATH)
-    parser.add_argument("--tensor-parallel-size", "--tp", type=int, default=1)
-    parser.add_argument("--gpu-memory-utilization", type=float, default=0.5)
-    parser.add_argument("--max-model-len", type=int, default=16384)
-    parser.add_argument("--max-num-seqs", type=int, default=128)
+    parser.add_argument(
+        "--tensor-parallel-size",
+        "--tp",
+        type=int,
+        default=int(os.getenv("MONKEYOCR_TENSOR_PARALLEL_SIZE", "1")),
+    )
+    parser.add_argument(
+        "--gpu-memory-utilization",
+        type=float,
+        default=float(os.getenv("MONKEYOCR_VLLM_GPU_MEMORY_UTILIZATION", "0.9")),
+    )
+    parser.add_argument(
+        "--max-model-len",
+        type=int,
+        default=int(os.getenv("MONKEYOCR_VLLM_MAX_MODEL_LEN", "16384")),
+    )
+    parser.add_argument(
+        "--max-num-seqs",
+        type=int,
+        default=int(os.getenv("MONKEYOCR_VLLM_MAX_NUM_SEQS", "128")),
+    )
     parser.add_argument(
         "--max-num-batched-tokens",
         type=int,
-        default=16384,
+        default=int(os.getenv("MONKEYOCR_VLLM_MAX_BATCHED_TOKENS", "16384")),
         help=("Scheduler token budget; including speculative tokens."),
     )
     parser.add_argument(
@@ -111,12 +132,13 @@ def main():
         "--draft-model",
         "-d",
         type=str,
-        help="Optional local path to a MonkeyOCRv2 DFlash draft. Enables DFlash speculative decoding.",
+        default=os.getenv("MONKEYOCR_DRAFT_MODEL_PATH") or None,
+        help="Optional local path to a MonkeyOCRv2 DFlash draft.",
     )
     parser.add_argument(
         "--dflash-num-speculative-tokens",
         type=int,
-        default=16,
+        default=int(os.getenv("MONKEYOCR_DFLASH_SPECULATIVE_TOKENS", "16")),
         help="DFlash proposal block size. MonkeyOCRv2-B-Parsing-DFlash b16 uses 16.",
     )
     parser.add_argument(
@@ -124,9 +146,17 @@ def main():
         type=str,
         help="DFlash attention backend.",
     )
-    parser.add_argument("--served-model-name", default="MonkeyOCRv2")
-    parser.add_argument("--host", default=None)
-    parser.add_argument("--port", "-p", type=int, default=8888)
+    parser.add_argument(
+        "--served-model-name",
+        default=os.getenv("MONKEYOCR_SERVED_MODEL_NAME", "MonkeyOCRv2"),
+    )
+    parser.add_argument("--host", default=os.getenv("MONKEYOCR_VLLM_HOST", "0.0.0.0"))
+    parser.add_argument(
+        "--port",
+        "-p",
+        type=int,
+        default=int(os.getenv("MONKEYOCR_VLLM_PORT", "8888")),
+    )
     parser.add_argument(
         "extra_args", nargs=argparse.REMAINDER, help="Extra arguments passed to vLLM serve"
     )
