@@ -82,10 +82,6 @@ target-version = "py311"
 line-length = 100
 src = ["src", "tests"]
 extend-exclude = [
-    "download_model.py",
-    "parsing",
-    "understanding",
-    "vision",
     "src/monkeyocr/infrastructure/modeling",
     "src/monkeyocr/infrastructure/pipeline",
     "src/monkeyocr/infrastructure/training",

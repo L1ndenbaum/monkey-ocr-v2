@@ -12,4 +12,10 @@ dotenv/secrets
 model_weight
 output
 tests
+src/monkeyocr/infrastructure/training
 src/monkeyocr/infrastructure/training/vendor
+src/monkeyocr/interface/demo
+src/monkeyocr/interface/cli/model.py
+src/monkeyocr/interface/cli/understanding.py
+src/monkeyocr/interface/cli/vision.py
+src/monkeyocr/interface/cli/vision_vitae.py
