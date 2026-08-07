@@ -1,7 +1,6 @@
-from modeling import modeling_monkeyocrv2_vllm  # noqa: F401 - register vLLM model
+from monkeyocr.infrastructure.modeling import monkeyocr_vllm  # noqa: F401
 
 import ast
-import hashlib
 import os
 import json
 import re
@@ -10,7 +9,6 @@ import torch
 import base64
 import requests
 import warnings
-import zipfile
 import traceback
 import threading
 import queue
@@ -44,7 +42,14 @@ try:
 except Exception:
     tqdm = None
 
-from modeling.modeling_preprocessor import Preprocessor
+from monkeyocr.infrastructure.modeling.preprocessor import Preprocessor
+from monkeyocr.infrastructure.pipeline.config import BackendConfig, OutputDirs, PipelineConfig
+from monkeyocr.infrastructure.storage.artifacts import (
+    load_all_results,
+    load_markdowns,
+    make_artifact_filename,
+    zip_dir,
+)
 
 ALL_PROMPT = {
     "Caption": "Please output the text content from the image.",
@@ -62,26 +67,8 @@ ALL_PROMPT = {
 }
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"}
 INPUT_EXTS = IMAGE_EXTS | {".pdf"}
-MAX_FILENAME_BYTES = 255
 # PDFium is not thread-safe. Every in-process PDFium call must share this lock.
 PDFIUM_LOCK = threading.RLock()
-
-
-def make_artifact_filename(stem: str, suffix: str, max_bytes: int = MAX_FILENAME_BYTES) -> str:
-    """Build a deterministic filesystem-safe name without changing names that already fit."""
-    stem = str(stem)
-    suffix = str(suffix)
-    candidate = stem + suffix
-    if len(candidate.encode("utf-8")) <= max_bytes:
-        return candidate
-
-    digest = hashlib.sha256(candidate.encode("utf-8")).hexdigest()[:10]
-    trailer = f"_{digest}{suffix}"
-    budget = max_bytes - len(trailer.encode("utf-8"))
-    if budget <= 0:
-        raise ValueError(f"Artifact suffix is too long: {suffix!r}")
-    shortened = stem.encode("utf-8")[:budget].decode("utf-8", errors="ignore").rstrip(" .")
-    return f"{shortened or 'artifact'}{trailer}"
 
 
 def build_vllm_prompt(question: str) -> str:
@@ -2078,48 +2065,6 @@ def run_streaming_pipeline(
         shutil.rmtree(preprocessed_dir, ignore_errors=True)
 
 
-@dataclass(frozen=True)
-class BackendConfig:
-    model_path: str
-    server_url: str = ""
-    served_model_name: str = "MonkeyOCRv2"
-    tp: int = 1
-    max_pixels: int = 1003520
-    request_timeout: int = 300
-    http_max_retries: int = 5
-    http_retry_backoff: float = 1.0
-    server_max_inflight: int = 1024
-    preprocess_batch_size: int = 32
-    skip_preprocess: bool = False
-
-
-@dataclass(frozen=True)
-class PipelineConfig:
-    input_path: str
-    output_path: str
-    backend: BackendConfig
-    page_max_inflight: int = 64
-    draw_layout: bool = False
-    end2end: bool = False
-    skip_processed: bool = False
-    retry_repeat: bool = False
-    retry_repeat_max_retries: int = 3
-    keep_header_footer: bool = False
-    use_base64: bool = False
-    show_progress_bar: bool = False
-    verbose: bool = True
-
-
-@dataclass(frozen=True)
-class OutputDirs:
-    out_dir: Path
-    json_dir: Path
-    md_dir: Path
-    image_dir: Path
-    preprocessed_dir: Path
-    layout_dir: Path | None
-
-
 class BackendManager:
     def __init__(self):
         self._lock = threading.Lock()
@@ -2883,48 +2828,6 @@ class ServicePipelinePool:
         self.pdf_renderer.close()
         self.page_executor.shutdown(wait=True)
         self.output_executor.shutdown(wait=True)
-
-
-def load_all_results(out_dir: str | Path):
-    path = Path(out_dir) / "all_results.json"
-    if not path.exists():
-        return []
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def load_markdowns(md_dir: str | Path):
-    return [
-        path.read_text(encoding="utf-8")
-        for path in sorted(Path(md_dir).glob("*.md"))
-    ]
-
-
-def zip_dir(src_dir: str | Path, zip_path: str | Path):
-    src_dir = Path(src_dir)
-    zip_path = Path(zip_path)
-    already_compressed = {
-        ".7z", ".avi", ".gif", ".gz", ".jpeg", ".jpg", ".mp3", ".mp4",
-        ".pdf", ".png", ".rar", ".webp", ".zip",
-    }
-    with zipfile.ZipFile(
-        zip_path,
-        "w",
-        zipfile.ZIP_DEFLATED,
-        compresslevel=1,
-    ) as zipf:
-        for path in src_dir.rglob("*"):
-            if path.is_file() and path != zip_path:
-                compression = (
-                    zipfile.ZIP_STORED
-                    if path.suffix.lower() in already_compressed
-                    else zipfile.ZIP_DEFLATED
-                )
-                zipf.write(
-                    path,
-                    path.relative_to(src_dir),
-                    compress_type=compression,
-                    compresslevel=1 if compression == zipfile.ZIP_DEFLATED else None,
-                )
 
 
 def _list_single_task_inputs(input_path: str | Path):
