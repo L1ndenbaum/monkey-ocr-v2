@@ -9,6 +9,10 @@ class UnsupportedMediaTypeError(MonkeyOCRError):
     """Raised when a requested operation cannot process the input suffix."""
 
 
+class InvalidDocumentError(MonkeyOCRError):
+    """Raised when an uploaded document cannot be decoded safely."""
+
+
 class UploadTooLargeError(MonkeyOCRError):
     """Raised when a streamed upload crosses the configured byte limit."""
 
