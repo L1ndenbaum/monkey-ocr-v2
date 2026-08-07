@@ -1,0 +1,52 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "monkeyocr"
+version = "2.0.0"
+description = "MonkeyOCRv2 document parsing service"
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+license = { file = "LICENSE" }
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "mypy>=1.16,<2",
+    "pytest>=8.4,<9",
+    "pytest-asyncio>=1.0,<2",
+    "ruff>=0.12,<0.13",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/monkeyocr"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+extend-exclude = [
+    "download_model.py",
+    "parsing",
+    "understanding",
+    "vision",
+    "src/monkeyocr/infrastructure/training/vendor",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["monkeyocr"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src/monkeyocr"]
+exclude = ["src/monkeyocr/infrastructure/training/vendor/"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+asyncio_mode = "auto"

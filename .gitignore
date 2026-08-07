@@ -8,6 +8,10 @@ slurm_logs/
 __pycache__
 *.log
 *.pyc
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.venv/
 .vscode
 debug/
 *.ipynb
@@ -43,4 +47,9 @@ _build/
 # monkeyocr
 output/
 build/
-model_weight
+model_weight/
+
+# Local configuration and secrets. Examples remain tracked.
+dotenv/.env*
+!dotenv/*.example
+dotenv/secrets/
