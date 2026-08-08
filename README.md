@@ -340,8 +340,13 @@ profile, and a reachable HTTP-01 challenge on port 80. Edit
 sudo scripts/install-host-nginx.sh
 ```
 
-The installer first loads an HTTP-only Nginx configuration, obtains the IP
-certificate with Certbot webroot mode, then enables the TLS default server.
+`MONKEYOCR_HTTP_MODE=managed` lets the installer own both ports 80 and 443. If
+another application already owns the HTTP default server, set
+`MONKEYOCR_HTTP_MODE=preserve`, add the documented ACME challenge location to
+that existing server, and leave its other locations unchanged. Preserve mode
+verifies the shared challenge path and installs only the MonkeyOCR HTTPS
+default server, so the existing HTTP application remains available.
+
 The final proxy exposes only `/api/v1`, applies a 50 MiB body limit, four
 connections per source IP, and a 10 requests/minute rate limit. A systemd timer
 renews the roughly six-day certificate every 12 hours, reloads Nginx after a

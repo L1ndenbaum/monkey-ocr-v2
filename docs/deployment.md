@@ -10,8 +10,8 @@ the Compose network.
   Compose, and the NVIDIA Container Toolkit.
 - The public IPv4 or IPv6 address routed directly to the server.
 - Firewall ingress for TCP 80 and 443. Do not expose 8000 or 8888.
-- Nginx, `envsubst`, OpenSSL, and Certbot 5.4 or newer on the host. The Certbot
-  Nginx installer does not issue IP certificates; this repository uses
+- Nginx, curl, `envsubst`, OpenSSL, and Certbot 5.4 or newer on the host. The
+  Certbot Nginx installer does not issue IP certificates; this repository uses
   `certonly --webroot --ip-address`.
 - A proxy listening on host port 9090 when the default build proxy values are
   retained.
@@ -34,7 +34,8 @@ Edit these ignored files:
 - `dotenv/.env.vllm`: vLLM scheduling. Set the draft path when using DFlash.
 - `dotenv/.env.build`: build proxy and Python index. The supplied proxy URLs
   already use `host.docker.internal`; no wrapper conversion is performed.
-- `dotenv/.env.nginx`: real public IP, ACME email, webroot, and API upstream.
+- `dotenv/.env.nginx`: real public IP, ACME email, webroot, API upstream, and
+  whether the installer manages or preserves the HTTP default server.
 
 The local Bearer token is generated without a trailing newline at
 `dotenv/secrets/monkeyocr_api_token` with mode 0600. On a server, keep this file
@@ -73,10 +74,53 @@ curl -fsS \
 
 The first health endpoint is intentionally internal. Nginx never proxies it.
 
-## Obtain the IP certificate and install Nginx
+## Obtain the IP certificate and install the host proxy
 
 Keep port 80 reachable: IP certificates use HTTP-01 and must be renewed
-frequently. After editing `dotenv/.env.nginx`, run:
+frequently. Choose one of the following HTTP ownership modes before running the
+installer.
+
+### Let MonkeyOCR manage HTTP and HTTPS
+
+Use this mode on a dedicated host where MonkeyOCR may own both default servers:
+
+```dotenv
+MONKEYOCR_HTTP_MODE=managed
+MONKEYOCR_REPLACE_DEFAULT_SERVER=true
+```
+
+The installer temporarily loads an HTTP-only default server for the challenge,
+then replaces it with the HTTP redirect and HTTPS proxy after issuance.
+
+### Preserve an existing HTTP default server
+
+Use this mode when another application, such as KGraph, already owns port 80:
+
+```dotenv
+MONKEYOCR_HTTP_MODE=preserve
+MONKEYOCR_REPLACE_DEFAULT_SERVER=false
+```
+
+Add this location to the existing port-80 default `server` without changing its
+other locations:
+
+```nginx
+location ^~ /.well-known/acme-challenge/ {
+    root /var/www/monkeyocr-acme;
+    default_type text/plain;
+    try_files $uri =404;
+}
+```
+
+The `root` must equal `MONKEYOCR_ACME_WEBROOT`. Preserve mode reloads the
+existing valid Nginx configuration and checks the route with a random local
+challenge file before contacting the ACME service. It never creates a port-80
+listener or redirects the existing HTTP site's traffic. Port 443 must remain
+available for MonkeyOCR's HTTPS default server.
+
+### Run the installer
+
+After editing `dotenv/.env.nginx`, run:
 
 ```bash
 sudo scripts/install-host-nginx.sh
@@ -86,13 +130,17 @@ For a first dry run, set `MONKEYOCR_ACME_STAGING=true`; the resulting
 certificate is deliberately untrusted. Set it back to `false` and rerun for
 the production certificate.
 
-The installer performs this sequence:
+In managed mode, the installer performs this sequence:
 
 1. Validates the IP and Certbot version.
 2. Installs an HTTP-only default server that exposes only the ACME webroot.
 3. Requests a `shortlived` IP certificate with Certbot webroot mode.
 4. Replaces the bootstrap site with the HTTPS reverse proxy.
 5. Installs and starts `monkeyocr-cert-renew.timer`.
+
+In preserve mode, step 2 is replaced by validation of the existing HTTP
+server, and step 4 installs the HTTPS-only template. Certificate renewal still
+uses the shared webroot and does not replace the existing HTTP site.
 
 Direct-IP TLS has no domain fallback. The Nginx TLS listener is therefore the
 default server and always presents the IP certificate, including when a client
@@ -111,11 +159,13 @@ curl -fsS \
   "https://PUBLIC_IP/api/v1/ocr/text"
 
 curl -fsS "https://PUBLIC_IP/internal/health/ready" || true
+curl -fsS "http://PUBLIC_IP/"
 ```
 
 The first request must return 401 with `WWW-Authenticate: Bearer`; the second
 must return an envelope with `internal_code=SUCCESS`; the health request must
-not be publicly routed.
+not be publicly routed. In preserve mode, the final HTTP request must still
+return the existing site's content.
 
 ## Renewal and alert checks
 
@@ -149,11 +199,14 @@ token after the API restart.
 
 ## Host proxy rollback
 
-The installer preserves Debian's default-site symlink as
+In managed mode, the installer preserves Debian's default-site symlink as
 `/etc/nginx/sites-enabled/default.disabled-by-monkeyocr` when replacement is
 enabled. To remove the MonkeyOCR host proxy, disable its timer, remove the
 MonkeyOCR site symlink, restore that default symlink if needed, then run
-`nginx -t` before reloading Nginx. Container rollback is independent:
+`nginx -t` before reloading Nginx. In preserve mode there is no default-site
+backup to restore; remove only the MonkeyOCR HTTPS site and, when the
+certificate is no longer needed, the ACME location from the existing HTTP
+site. Container rollback is independent:
 
 ```bash
 scripts/compose.sh down
