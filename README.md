@@ -261,20 +261,24 @@ HTTPS_PROXY=http://host.docker.internal:9090
 
 Both Docker build and runtime configuration add
 `host.docker.internal:host-gateway`; the wrapper does not rewrite proxy URLs.
+Clear both proxy values on a server that has no proxy listening on host port
+9090. Build-only values are passed to Compose without becoming Docker CLI
+proxy settings.
+
 Edit `dotenv/.env.compose`, `dotenv/.env.api`, and `dotenv/.env.vllm` for the
 server before building.
 
 ### 2. Download model weights
 
 ```bash
-uv run --extra research monkeyocr-model -n MonkeyOCRv2-B-Parsing
+uv run --no-dev --extra research monkeyocr-model -n MonkeyOCRv2-B-Parsing
 ```
 
 The default mount expects the target model at
 `model_weight/MonkeyOCRv2-B-Parsing`. For DFlash also download the draft:
 
 ```bash
-uv run --extra research monkeyocr-model -n MonkeyOCRv2-B-Parsing-DFlash
+uv run --no-dev --extra research monkeyocr-model -n MonkeyOCRv2-B-Parsing-DFlash
 ```
 
 Then set `MONKEYOCR_PROFILE=dflash` in `dotenv/.env.compose` and set
@@ -282,7 +286,35 @@ Then set `MONKEYOCR_PROFILE=dflash` in `dotenv/.env.compose` and set
 `dotenv/.env.vllm`. The default `standard` profile uses vLLM 0.11.2; DFlash
 uses vLLM 0.25.1. These extras are deliberately mutually exclusive.
 
-### 3. Build and run
+### 3. Pull or build the production image
+
+The `Publish production image` GitHub Actions workflow builds the complete
+standard inference image and publishes it as:
+
+```text
+ghcr.io/l1ndenbaum/monkey-ocr-v2:standard
+ghcr.io/l1ndenbaum/monkey-ocr-v2:standard-sha-<full-git-sha>
+```
+
+For an immutable production deployment, copy the digest from the workflow
+summary and set the complete reference in `dotenv/.env.compose`:
+
+```dotenv
+MONKEYOCR_PROFILE=standard
+MONKEYOCR_IMAGE=ghcr.io/l1ndenbaum/monkey-ocr-v2@sha256:<digest>
+```
+
+Then pull and start without invoking a local build:
+
+```bash
+scripts/compose.sh pull
+scripts/compose.sh up -d --no-build
+scripts/compose.sh ps
+```
+
+The GHCR package must either be public or the server must first run
+`docker login ghcr.io` with a token that has `read:packages`. To build locally
+instead, leave `MONKEYOCR_IMAGE` empty and run:
 
 ```bash
 scripts/compose.sh build

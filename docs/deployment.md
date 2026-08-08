@@ -14,7 +14,8 @@ the Compose network.
   Certbot Nginx installer does not issue IP certificates; this repository uses
   `certonly --webroot --ip-address`.
 - A proxy listening on host port 9090 when the default build proxy values are
-  retained.
+  retained for a local image build. Clear them when using no proxy or a
+  prebuilt GHCR image.
 
 On Ubuntu, install Nginx and `envsubst` from apt, then install a current Certbot
 release (for example with the official snap). Confirm `certbot --version`
@@ -28,8 +29,9 @@ scripts/compose.sh init
 
 Edit these ignored files:
 
-- `dotenv/.env.compose`: host paths, UID/GID, exposed loopback port, and
-  `standard` or `dflash` profile.
+- `dotenv/.env.compose`: host paths, UID/GID, exposed loopback port,
+  `standard` or `dflash` profile, and an optional complete prebuilt image
+  reference.
 - `dotenv/.env.api`: API limits and model/vLLM locations inside containers.
 - `dotenv/.env.vllm`: vLLM scheduling. Set the draft path when using DFlash.
 - `dotenv/.env.build`: build proxy and Python index. The supplied proxy URLs
@@ -50,7 +52,59 @@ model_weight/
 └── MonkeyOCRv2-B-Parsing-DFlash/  # DFlash only
 ```
 
-## Start the GPU services
+## Start the GPU services from GHCR
+
+The `Publish production image` workflow at
+`.github/workflows/publish-image.yml` runs for relevant pushes to `main`,
+version tags, and manual dispatches. It builds the complete standard inference
+image on GitHub Actions and publishes these GHCR tags:
+
+```text
+ghcr.io/l1ndenbaum/monkey-ocr-v2:standard
+ghcr.io/l1ndenbaum/monkey-ocr-v2:standard-sha-<full-git-sha>
+```
+
+The moving `standard` tag is convenient for testing. For production, open the
+completed workflow summary, copy its image digest, and set an immutable
+reference in `dotenv/.env.compose`:
+
+```dotenv
+MONKEYOCR_PROFILE=standard
+MONKEYOCR_IMAGE=ghcr.io/l1ndenbaum/monkey-ocr-v2@sha256:<digest>
+```
+
+GHCR permits anonymous pulls only after the package visibility is changed to
+public. If the package remains private, create a classic personal access token
+with only `read:packages`, then log in without placing it on the command line:
+
+```bash
+read -rsp "GHCR token: " GHCR_TOKEN
+echo
+printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u L1ndenbaum --password-stdin
+unset GHCR_TOKEN
+```
+
+Pull and start both services from the same immutable image:
+
+```bash
+scripts/compose.sh config --quiet
+scripts/compose.sh pull
+scripts/compose.sh up -d --no-build
+scripts/compose.sh ps
+scripts/compose.sh logs -f vllm api
+```
+
+Docker Hub registry mirrors do not accelerate `ghcr.io`; the Docker daemon
+must be able to reach GHCR directly or through its own pull proxy. The settings
+in `dotenv/.env.build` apply only to Dockerfile build steps.
+
+To roll forward or back, change only `MONKEYOCR_IMAGE` to another published
+digest, then repeat `pull` and `up -d --no-build`.
+
+## Build the GPU services locally
+
+Leave `MONKEYOCR_IMAGE` empty to retain the profile-derived local image name,
+then run:
 
 ```bash
 scripts/compose.sh config --quiet

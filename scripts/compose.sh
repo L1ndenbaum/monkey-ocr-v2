@@ -16,7 +16,6 @@ for required in .env.build .env.compose .env.api .env.vllm; do
 done
 
 set -a
-source "$dotenv_dir/.env.build"
 source "$dotenv_dir/.env.compose"
 source "$dotenv_dir/.env.vllm"
 set +a
@@ -35,8 +34,12 @@ case "$MONKEYOCR_PROFILE" in
         ;;
 esac
 
+MONKEYOCR_IMAGE=${MONKEYOCR_IMAGE:-monkeyocr:$MONKEYOCR_PROFILE}
+export MONKEYOCR_IMAGE
+
 exec docker compose \
     --project-directory "$repo_root" \
+    --env-file "$dotenv_dir/.env.build" \
     --env-file "$dotenv_dir/.env.compose" \
     -f "$repo_root/infrastructure/docker/compose.yml" \
     "$@"

@@ -13,7 +13,7 @@ x-monkeyocr-build: &monkeyocr-build
     - host.docker.internal:host-gateway
 
 x-monkeyocr-service: &monkeyocr-service
-  image: monkeyocr:${MONKEYOCR_PROFILE:-standard}
+  image: ${MONKEYOCR_IMAGE:-monkeyocr:standard}
   build: *monkeyocr-build
   restart: unless-stopped
   init: true

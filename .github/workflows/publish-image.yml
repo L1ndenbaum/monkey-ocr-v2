@@ -1,0 +1,105 @@
+name: Publish production image
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+    paths:
+      - ".github/workflows/publish-image.yml"
+      - ".dockerignore"
+      - "infrastructure/docker/**"
+      - "src/**"
+      - "LICENSE"
+      - "README.md"
+      - "pyproject.toml"
+      - "uv.lock"
+
+concurrency:
+  group: publish-standard-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  publish-standard:
+    name: Build standard inference image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Reclaim runner disk space
+        run: |
+          sudo rm -rf \
+            /opt/ghc \
+            /opt/hostedtoolcache \
+            /usr/local/lib/android \
+            /usr/local/share/boost \
+            /usr/share/dotnet
+          sudo docker system prune --all --force --volumes
+          df -h /
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate image metadata
+        id: metadata
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=standard,enable={{is_default_branch}}
+            type=sha,prefix=standard-sha-,format=long
+            type=semver,pattern={{version}},prefix=standard-
+          labels: |
+            org.opencontainers.image.title=MonkeyOCRv2 standard inference service
+            org.opencontainers.image.description=Authenticated MonkeyOCRv2 API and vLLM runtime
+
+      - name: Build and push image
+        id: build
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: .
+          file: infrastructure/docker/Dockerfile
+          platforms: linux/amd64
+          push: true
+          pull: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          build-args: |
+            INFERENCE_PROFILE=standard
+            HTTP_PROXY=
+            HTTPS_PROXY=
+            NO_PROXY=localhost,127.0.0.1,api,vllm
+            UV_INDEX_URL=https://pypi.org/simple
+          cache-from: type=gha,scope=monkeyocr-standard
+          cache-to: type=gha,mode=max,scope=monkeyocr-standard,ignore-error=true
+          provenance: mode=max
+          sbom: true
+
+      - name: Publish summary
+        run: |
+          {
+            echo "### Published MonkeyOCR image"
+            echo '```text'
+            echo '${{ steps.metadata.outputs.tags }}'
+            echo '```'
+            echo "Digest: \`${{ steps.build.outputs.digest }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
