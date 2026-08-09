@@ -37,13 +37,27 @@ def select_linux_amd64_digest(index: dict[str, Any]) -> str:
     return str(candidates[0])
 
 
-def measure_manifest(manifest: dict[str, Any]) -> tuple[int, int, int]:
-    """Return total compressed bytes, largest layer bytes, and layer count."""
+def layer_digests(manifest: dict[str, Any]) -> set[str]:
+    return {str(layer["digest"]) for layer in manifest.get("layers", [])}
 
-    sizes = [int(layer["size"]) for layer in manifest.get("layers", [])]
-    if not sizes:
+
+def measure_manifest(
+    manifest: dict[str, Any],
+    excluded_digests: set[str] | None = None,
+) -> tuple[int, int, int]:
+    """Return total bytes, largest managed layer bytes, and layer count."""
+
+    layers = manifest.get("layers", [])
+    if not layers:
         raise ValueError("Image manifest does not contain any layers")
-    return sum(sizes), max(sizes), len(sizes)
+    excluded_digests = excluded_digests or set()
+    total_bytes = sum(int(layer["size"]) for layer in layers)
+    managed_sizes = [
+        int(layer["size"]) for layer in layers if str(layer["digest"]) not in excluded_digests
+    ]
+    if not managed_sizes:
+        raise ValueError("Image manifest does not contain any managed layers")
+    return total_bytes, max(managed_sizes), len(layers)
 
 
 def inspect_raw(reference: str) -> dict[str, Any]:
@@ -74,6 +88,10 @@ def append_summary(message: str) -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("reference", help="Published tag or digest to inspect")
+    parser.add_argument(
+        "--base-reference",
+        help="Pinned base image whose upstream layers are excluded from the layer budget",
+    )
     parser.add_argument("--max-total-gib", required=True, type=float)
     parser.add_argument("--max-layer-gib", required=True, type=float)
     return parser.parse_args()
@@ -82,12 +100,15 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     manifest = resolve_image_manifest(args.reference)
-    total_bytes, largest_bytes, layer_count = measure_manifest(manifest)
+    excluded_digests: set[str] = set()
+    if args.base_reference:
+        excluded_digests = layer_digests(resolve_image_manifest(args.base_reference))
+    total_bytes, largest_bytes, layer_count = measure_manifest(manifest, excluded_digests)
     total_gib = total_bytes / GIB
     largest_gib = largest_bytes / GIB
     message = (
         f"- `{args.reference}`: {total_gib:.2f} GiB compressed, "
-        f"largest layer {largest_gib:.2f} GiB, {layer_count} layers"
+        f"largest managed layer {largest_gib:.2f} GiB, {layer_count} layers"
     )
     print(message)
     append_summary(message)
@@ -96,7 +117,9 @@ def main() -> None:
     if total_gib > args.max_total_gib:
         failures.append(f"total {total_gib:.2f} GiB exceeds {args.max_total_gib:.2f} GiB")
     if largest_gib > args.max_layer_gib:
-        failures.append(f"largest layer {largest_gib:.2f} GiB exceeds {args.max_layer_gib:.2f} GiB")
+        failures.append(
+            f"largest managed layer {largest_gib:.2f} GiB exceeds {args.max_layer_gib:.2f} GiB"
+        )
     if failures:
         raise SystemExit("; ".join(failures))
 

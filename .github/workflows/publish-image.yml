@@ -46,6 +46,7 @@ jobs:
             cache_primary: monkeyocr-api-standard
             cache_secondary: monkeyocr-vllm-standard
             max_total_gib: 8
+            base_reference: nvidia/cuda:12.8.1-runtime-ubuntu22.04@sha256:fcbbd60a5ad3db3a1c7375bf14546b369b54064c513224310b2026df50c7a9bd
             legacy_standard: false
           - target: vllm
             tag_prefix: vllm-standard
@@ -54,6 +55,7 @@ jobs:
             cache_primary: monkeyocr-vllm-standard
             cache_secondary: monkeyocr-api-standard
             max_total_gib: 12
+            base_reference: nvidia/cuda:12.8.1-devel-ubuntu22.04@sha256:6617a625f4090c76c545a0e7d63f2e441718ef9af7f4efe7dd1242a29e289fd7
             legacy_standard: true
     steps:
       - name: Check out repository
@@ -124,6 +126,7 @@ jobs:
         run: |
           python scripts/check_image_size.py \
             "$IMAGE_REFERENCE" \
+            --base-reference '${{ matrix.base_reference }}' \
             --max-total-gib '${{ matrix.max_total_gib }}' \
             --max-layer-gib 2
 

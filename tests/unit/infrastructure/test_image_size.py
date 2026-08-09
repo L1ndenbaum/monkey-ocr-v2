@@ -57,8 +57,30 @@ def test_select_linux_amd64_digest_rejects_ambiguous_index() -> None:
 
 
 def test_measure_manifest_uses_compressed_layer_sizes() -> None:
-    assert measure_manifest({"layers": [{"size": 10}, {"size": 25}, {"size": 5}]}) == (
+    assert measure_manifest(
+        {
+            "layers": [
+                {"digest": "sha256:a", "size": 10},
+                {"digest": "sha256:b", "size": 25},
+                {"digest": "sha256:c", "size": 5},
+            ]
+        }
+    ) == (
         40,
         25,
         3,
     )
+
+
+def test_measure_manifest_excludes_upstream_layers_only_from_layer_budget() -> None:
+    result = SCRIPT["measure_manifest"](
+        {
+            "layers": [
+                {"digest": "sha256:base", "size": 100},
+                {"digest": "sha256:managed", "size": 25},
+            ]
+        },
+        {"sha256:base"},
+    )
+
+    assert tuple(result) == (125, 25, 2)
