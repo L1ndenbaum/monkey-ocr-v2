@@ -122,7 +122,7 @@ jobs:
 
       - name: Enforce image size budgets
         env:
-          IMAGE_REFERENCE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          IMAGE_REFERENCE: ${{ fromJSON(steps.metadata.outputs.json).tags[0] }}@${{ steps.build.outputs.digest }}
         run: |
           python scripts/check_image_size.py \
             "$IMAGE_REFERENCE" \

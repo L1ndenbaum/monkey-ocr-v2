@@ -61,12 +61,19 @@ def measure_manifest(
 
 
 def inspect_raw(reference: str) -> dict[str, Any]:
-    result = subprocess.run(
-        ["docker", "buildx", "imagetools", "inspect", "--raw", reference],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    command = ["docker", "buildx", "imagetools", "inspect", "--raw", reference]
+    try:
+        result = subprocess.run(
+            command,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as error:
+        stderr = error.stderr if isinstance(error.stderr, str) else ""
+        stdout = error.stdout if isinstance(error.stdout, str) else ""
+        detail = stderr.strip() or stdout.strip() or f"exit status {error.returncode}"
+        raise RuntimeError(f"Failed to inspect {reference}: {detail}") from error
     return dict(json.loads(result.stdout))
 
 

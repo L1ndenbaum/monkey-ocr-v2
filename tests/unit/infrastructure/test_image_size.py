@@ -1,12 +1,12 @@
 import runpy
+import subprocess
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-SCRIPT = runpy.run_path(
-    Path(__file__).parents[3] / "scripts" / "check_image_size.py",
-)
+REPO_ROOT = Path(__file__).parents[3]
+SCRIPT = runpy.run_path(REPO_ROOT / "scripts" / "check_image_size.py")
 
 
 def image_repository(reference: str) -> str:
@@ -84,3 +84,26 @@ def test_measure_manifest_excludes_upstream_layers_only_from_layer_budget() -> N
     )
 
     assert tuple(result) == (125, 25, 2)
+
+
+def test_inspect_raw_surfaces_docker_stderr(monkeypatch: pytest.MonkeyPatch) -> None:
+    reference = "ghcr.io/Owner/image@sha256:digest"
+
+    def run(*args: Any, **_kwargs: Any) -> None:
+        raise subprocess.CalledProcessError(
+            returncode=1,
+            cmd=args[0],
+            stderr="ERROR: repository name must be lowercase",
+        )
+
+    monkeypatch.setattr(SCRIPT["subprocess"], "run", run)
+
+    with pytest.raises(RuntimeError, match="repository name must be lowercase"):
+        SCRIPT["inspect_raw"](reference)
+
+
+def test_publish_workflow_uses_metadata_normalized_image_tag() -> None:
+    workflow = (REPO_ROOT / ".github/workflows/publish-image.yml").read_text(encoding="utf-8")
+
+    assert "IMAGE_REFERENCE: ${{ fromJSON(steps.metadata.outputs.json).tags[0] }}@" in workflow
+    assert "IMAGE_REFERENCE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@" not in workflow
