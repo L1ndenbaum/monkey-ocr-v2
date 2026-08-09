@@ -1,4 +1,4 @@
-name: Publish production image
+name: Publish production images
 
 on:
   workflow_dispatch:
@@ -11,6 +11,7 @@ on:
       - ".github/workflows/publish-image.yml"
       - ".dockerignore"
       - "infrastructure/docker/**"
+      - "scripts/check_image_size.py"
       - "src/**"
       - "LICENSE"
       - "README.md"
@@ -31,9 +32,29 @@ env:
 
 jobs:
   publish-standard:
-    name: Build standard inference image
+    name: Build ${{ matrix.target }} standard image
     runs-on: ubuntu-24.04
     timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: api
+            tag_prefix: api-standard
+            title: MonkeyOCRv2 authenticated API
+            description: Authenticated MonkeyOCRv2 API and preprocessing runtime
+            cache_primary: monkeyocr-api-standard
+            cache_secondary: monkeyocr-vllm-standard
+            max_total_gib: 8
+            legacy_standard: false
+          - target: vllm
+            tag_prefix: vllm-standard
+            title: MonkeyOCRv2 vLLM runtime
+            description: MonkeyOCRv2 Standard vLLM inference runtime
+            cache_primary: monkeyocr-vllm-standard
+            cache_secondary: monkeyocr-api-standard
+            max_total_gib: 12
+            legacy_standard: true
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -65,12 +86,13 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=standard,enable={{is_default_branch}}
-            type=sha,prefix=standard-sha-,format=long
-            type=semver,pattern={{version}},prefix=standard-
+            type=raw,value=${{ matrix.tag_prefix }},enable={{is_default_branch}}
+            type=sha,prefix=${{ matrix.tag_prefix }}-sha-,format=long
+            type=semver,pattern={{version}},prefix=${{ matrix.tag_prefix }}-
+            type=raw,value=standard,enable=${{ matrix.legacy_standard && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
           labels: |
-            org.opencontainers.image.title=MonkeyOCRv2 standard inference service
-            org.opencontainers.image.description=Authenticated MonkeyOCRv2 API and vLLM runtime
+            org.opencontainers.image.title=${{ matrix.title }}
+            org.opencontainers.image.description=${{ matrix.description }}
 
       - name: Build and push image
         id: build
@@ -78,26 +100,37 @@ jobs:
         with:
           context: .
           file: infrastructure/docker/Dockerfile
+          target: ${{ matrix.target }}
           platforms: linux/amd64
           push: true
           pull: true
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
           build-args: |
-            INFERENCE_PROFILE=standard
             HTTP_PROXY=
             HTTPS_PROXY=
             NO_PROXY=localhost,127.0.0.1,api,vllm
             UV_INDEX_URL=https://pypi.org/simple
-          cache-from: type=gha,scope=monkeyocr-standard
-          cache-to: type=gha,mode=max,scope=monkeyocr-standard,ignore-error=true
+          cache-from: |
+            type=gha,scope=${{ matrix.cache_primary }}
+            type=gha,scope=${{ matrix.cache_secondary }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.cache_primary }},ignore-error=true
           provenance: mode=max
           sbom: true
+
+      - name: Enforce image size budgets
+        env:
+          IMAGE_REFERENCE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+        run: |
+          python scripts/check_image_size.py \
+            "$IMAGE_REFERENCE" \
+            --max-total-gib '${{ matrix.max_total_gib }}' \
+            --max-layer-gib 2
 
       - name: Publish summary
         run: |
           {
-            echo "### Published MonkeyOCR image"
+            echo "### Published MonkeyOCR ${{ matrix.target }} image"
             echo '```text'
             echo '${{ steps.metadata.outputs.tags }}'
             echo '```'

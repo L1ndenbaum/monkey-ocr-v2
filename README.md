@@ -242,8 +242,10 @@ Bearer token.
 
 ### 1. Initialize local configuration
 
-Requirements are Docker with Compose, the NVIDIA Container Toolkit, an NVIDIA
-GPU supported by CUDA 12.9, and `openssl` for generating the local secret.
+Requirements are Docker with Compose, the NVIDIA Container Toolkit, an
+Ampere/Ada NVIDIA GPU with a 550-series or newer compatible driver, and
+`openssl` for generating the local secret. The production wheel stack uses
+CUDA 12.8 through NVIDIA's CUDA 12.x minor-version compatibility.
 
 ```bash
 scripts/compose.sh init
@@ -275,33 +277,38 @@ uv run --no-dev --extra research monkeyocr-model -n MonkeyOCRv2-B-Parsing
 ```
 
 The default mount expects the target model at
-`model_weight/MonkeyOCRv2-B-Parsing`. For DFlash also download the draft:
+`model_weight/MonkeyOCRv2-B-Parsing`. The `research` extra is required only by
+the model-hub download CLI; it is not installed into either production image.
+For offline DFlash research, also download the draft:
 
 ```bash
 uv run --no-dev --extra research monkeyocr-model -n MonkeyOCRv2-B-Parsing-DFlash
 ```
 
-Then set `MONKEYOCR_PROFILE=dflash` in `dotenv/.env.compose` and set
-`MONKEYOCR_DRAFT_MODEL_PATH=/models/MonkeyOCRv2-B-Parsing-DFlash` in
-`dotenv/.env.vllm`. The default `standard` profile uses vLLM 0.11.2; DFlash
-uses vLLM 0.25.1. These extras are deliberately mutually exclusive.
+DFlash uses a separate vLLM 0.25.1 dependency profile and is deliberately
+excluded from the production Compose/GHCR path. The production Standard
+profile uses vLLM 0.11.2.
 
 ### 3. Pull or build the production image
 
-The `Publish production image` GitHub Actions workflow builds the complete
-standard inference image and publishes it as:
+The `Publish production images` GitHub Actions workflow builds separate API
+and vLLM targets and publishes them as:
 
 ```text
-ghcr.io/l1ndenbaum/monkey-ocr-v2:standard
-ghcr.io/l1ndenbaum/monkey-ocr-v2:standard-sha-<full-git-sha>
+ghcr.io/l1ndenbaum/monkey-ocr-v2:api-standard
+ghcr.io/l1ndenbaum/monkey-ocr-v2:api-standard-sha-<full-git-sha>
+ghcr.io/l1ndenbaum/monkey-ocr-v2:vllm-standard
+ghcr.io/l1ndenbaum/monkey-ocr-v2:vllm-standard-sha-<full-git-sha>
 ```
 
-For an immutable production deployment, copy the digest from the workflow
-summary and set the complete reference in `dotenv/.env.compose`:
+The legacy `standard` tag remains an alias for the complete vLLM image. For an
+immutable production deployment, copy both digests from the workflow summaries
+and set them in `dotenv/.env.compose`:
 
 ```dotenv
 MONKEYOCR_PROFILE=standard
-MONKEYOCR_IMAGE=ghcr.io/l1ndenbaum/monkey-ocr-v2@sha256:<digest>
+MONKEYOCR_API_IMAGE=ghcr.io/l1ndenbaum/monkey-ocr-v2@sha256:<api-digest>
+MONKEYOCR_VLLM_IMAGE=ghcr.io/l1ndenbaum/monkey-ocr-v2@sha256:<vllm-digest>
 ```
 
 Then pull and start without invoking a local build:
@@ -314,7 +321,7 @@ scripts/compose.sh ps
 
 The GHCR package must either be public or the server must first run
 `docker login ghcr.io` with a token that has `read:packages`. To build locally
-instead, leave `MONKEYOCR_IMAGE` empty and run:
+instead, leave both service image variables empty and run:
 
 ```bash
 scripts/compose.sh build
@@ -322,9 +329,12 @@ scripts/compose.sh up -d
 scripts/compose.sh ps
 ```
 
-The Dockerfile uses pinned CUDA and uv base images. apt metadata, uv's managed
-Python download, and Python packages all use BuildKit cache mounts. The API is
-available only at `127.0.0.1:8000` until host Nginx is installed.
+The API target uses pinned CUDA 12.8 `runtime`; vLLM uses pinned CUDA 12.8
+`devel` because its kernels may JIT at runtime. cuDNN comes from the locked
+PyTorch wheel rather than a `cudnn-devel` base. Large CUDA/Torch packages are
+split across layers, and apt metadata, uv's managed Python download, and wheel
+downloads use BuildKit cache mounts. The API is available only at
+`127.0.0.1:8000` until host Nginx is installed.
 
 ### 4. Call the authenticated API
 

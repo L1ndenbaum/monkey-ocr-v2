@@ -6,8 +6,10 @@ the Compose network.
 
 ## Prerequisites
 
-- Linux x86_64 with an NVIDIA GPU, current NVIDIA driver, Docker, Docker
-  Compose, and the NVIDIA Container Toolkit.
+- Linux x86_64 with an Ampere/Ada NVIDIA GPU, a compatible 550-series or newer
+  driver, Docker, Docker Compose, and the NVIDIA Container Toolkit. Production
+  containers use the CUDA 12.8 wheel/toolkit stack through CUDA 12.x
+  minor-version compatibility.
 - The public IPv4 or IPv6 address routed directly to the server.
 - Firewall ingress for TCP 80 and 443. Do not expose 8000 or 8888.
 - Nginx, curl, `envsubst`, OpenSSL, and Certbot 5.4 or newer on the host. The
@@ -29,11 +31,10 @@ scripts/compose.sh init
 
 Edit these ignored files:
 
-- `dotenv/.env.compose`: host paths, UID/GID, exposed loopback port,
-  `standard` or `dflash` profile, and an optional complete prebuilt image
-  reference.
+- `dotenv/.env.compose`: host paths, UID/GID, exposed loopback port, Standard
+  profile, and the optional API/vLLM prebuilt image references.
 - `dotenv/.env.api`: API limits and model/vLLM locations inside containers.
-- `dotenv/.env.vllm`: vLLM scheduling. Set the draft path when using DFlash.
+- `dotenv/.env.vllm`: Standard vLLM scheduling and model path.
 - `dotenv/.env.build`: build proxy and Python index. The supplied proxy URLs
   already use `host.docker.internal`; no wrapper conversion is performed.
 - `dotenv/.env.nginx`: real public IP, ACME email, webroot, API upstream, and
@@ -48,29 +49,31 @@ Place model directories below the configured model root. The default layout is:
 
 ```text
 model_weight/
-├── MonkeyOCRv2-B-Parsing/
-└── MonkeyOCRv2-B-Parsing-DFlash/  # DFlash only
+└── MonkeyOCRv2-B-Parsing/
 ```
 
 ## Start the GPU services from GHCR
 
 The `Publish production image` workflow at
 `.github/workflows/publish-image.yml` runs for relevant pushes to `main`,
-version tags, and manual dispatches. It builds the complete standard inference
-image on GitHub Actions and publishes these GHCR tags:
+version tags, and manual dispatches. It builds separate Standard API and vLLM
+images on GitHub Actions and publishes these GHCR tags:
 
 ```text
-ghcr.io/l1ndenbaum/monkey-ocr-v2:standard
-ghcr.io/l1ndenbaum/monkey-ocr-v2:standard-sha-<full-git-sha>
+ghcr.io/l1ndenbaum/monkey-ocr-v2:api-standard
+ghcr.io/l1ndenbaum/monkey-ocr-v2:api-standard-sha-<full-git-sha>
+ghcr.io/l1ndenbaum/monkey-ocr-v2:vllm-standard
+ghcr.io/l1ndenbaum/monkey-ocr-v2:vllm-standard-sha-<full-git-sha>
 ```
 
-The moving `standard` tag is convenient for testing. For production, open the
-completed workflow summary, copy its image digest, and set an immutable
-reference in `dotenv/.env.compose`:
+The moving `standard` tag remains a compatibility alias for the vLLM image.
+For production, open both completed matrix-job summaries, copy their digests,
+and set immutable references in `dotenv/.env.compose`:
 
 ```dotenv
 MONKEYOCR_PROFILE=standard
-MONKEYOCR_IMAGE=ghcr.io/l1ndenbaum/monkey-ocr-v2@sha256:<digest>
+MONKEYOCR_API_IMAGE=ghcr.io/l1ndenbaum/monkey-ocr-v2@sha256:<api-digest>
+MONKEYOCR_VLLM_IMAGE=ghcr.io/l1ndenbaum/monkey-ocr-v2@sha256:<vllm-digest>
 ```
 
 GHCR permits anonymous pulls only after the package visibility is changed to
@@ -84,7 +87,7 @@ printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u L1ndenbaum --password-stdin
 unset GHCR_TOKEN
 ```
 
-Pull and start both services from the same immutable image:
+Pull and start both immutable service images:
 
 ```bash
 scripts/compose.sh config --quiet
@@ -98,13 +101,14 @@ Docker Hub registry mirrors do not accelerate `ghcr.io`; the Docker daemon
 must be able to reach GHCR directly or through its own pull proxy. The settings
 in `dotenv/.env.build` apply only to Dockerfile build steps.
 
-To roll forward or back, change only `MONKEYOCR_IMAGE` to another published
-digest, then repeat `pull` and `up -d --no-build`.
+To roll forward or back, change the affected service digest and repeat `pull`
+and `up -d --no-build --force-recreate`. Keep the previous pair of digests
+until an authenticated real OCR request succeeds.
 
 ## Build the GPU services locally
 
-Leave `MONKEYOCR_IMAGE` empty to retain the profile-derived local image name,
-then run:
+Leave `MONKEYOCR_API_IMAGE`, `MONKEYOCR_VLLM_IMAGE`, and the deprecated
+`MONKEYOCR_IMAGE` fallback empty to use the local target image names, then run:
 
 ```bash
 scripts/compose.sh config --quiet
@@ -113,6 +117,11 @@ scripts/compose.sh up -d
 scripts/compose.sh ps
 scripts/compose.sh logs -f vllm api
 ```
+
+The API image uses the CUDA 12.8 runtime base and excludes vLLM. The vLLM
+image keeps the CUDA 12.8 devel toolchain for runtime kernel JIT. Both reuse the
+same locked CUDA/PyTorch wheel layers; cuDNN is supplied by PyTorch rather than
+the NVIDIA `cudnn-devel` base.
 
 Verify the loopback API before enabling the public proxy:
 

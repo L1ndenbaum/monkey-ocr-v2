@@ -30,8 +30,12 @@ case "$MONKEYOCR_PROFILE" in
 esac
 
 legacy_image=${MONKEYOCR_IMAGE:-}
-MONKEYOCR_API_IMAGE=${MONKEYOCR_API_IMAGE:-${legacy_image:-monkeyocr:api-standard}}
-MONKEYOCR_VLLM_IMAGE=${MONKEYOCR_VLLM_IMAGE:-${legacy_image:-monkeyocr:vllm-standard}}
+if [[ -z ${MONKEYOCR_API_IMAGE:-} && -z ${MONKEYOCR_VLLM_IMAGE:-} && -n $legacy_image ]]; then
+    MONKEYOCR_API_IMAGE=$legacy_image
+    MONKEYOCR_VLLM_IMAGE=$legacy_image
+fi
+MONKEYOCR_API_IMAGE=${MONKEYOCR_API_IMAGE:-monkeyocr:api-standard}
+MONKEYOCR_VLLM_IMAGE=${MONKEYOCR_VLLM_IMAGE:-monkeyocr:vllm-standard}
 export MONKEYOCR_API_IMAGE MONKEYOCR_VLLM_IMAGE
 
 exec docker compose \
