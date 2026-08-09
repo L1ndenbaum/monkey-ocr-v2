@@ -39,6 +39,10 @@ research = [
     "transformers>=4.51,<5",
 ]
 standard = ["vllm==0.11.2"]
+standard-runtime = [
+    "torch==2.9.0",
+    "torchvision==0.24.0",
+]
 training = ["beautifulsoup4>=4.13,<5"]
 
 [project.scripts]
@@ -67,6 +71,7 @@ conflicts = [
     [{ extra = "standard" }, { extra = "dflash" }],
     [{ extra = "dflash" }, { extra = "research" }],
     [{ extra = "dflash" }, { extra = "demo" }],
+    [{ extra = "dflash" }, { extra = "standard-runtime" }],
 ]
 environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
 

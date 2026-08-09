@@ -11,20 +11,8 @@ from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
 import requests
-import torch
 from PIL import Image
 from requests import exceptions as requests_exceptions
-from vllm import SamplingParams
-
-try:
-    from vllm.engine.arg_utils import AsyncEngineArgs
-    from vllm.engine.async_llm_engine import AsyncLLMEngine
-except Exception:
-    try:
-        from vllm import AsyncEngineArgs, AsyncLLMEngine
-    except Exception:
-        AsyncLLMEngine = None
-        AsyncEngineArgs = None
 
 from monkeyocr.infrastructure.pipeline.media import image_to_png_data_uri, load_image
 
@@ -263,8 +251,18 @@ class MonkeyOCRv2_ServerParsing:
 
 class MonkeyOCRv2_AsyncParsing:
     def __init__(self, model_path: str, tp: int = 1, max_inflight: int = 1024):
-        if AsyncLLMEngine is None or AsyncEngineArgs is None:
-            raise ImportError("AsyncLLMEngine is unavailable in this vLLM installation.")
+        import torch
+        from vllm import SamplingParams
+
+        try:
+            from vllm.engine.arg_utils import AsyncEngineArgs
+            from vllm.engine.async_llm_engine import AsyncLLMEngine
+        except ImportError:
+            from vllm import AsyncEngineArgs, AsyncLLMEngine
+
+        self._torch = torch
+        self._async_engine_args_class = AsyncEngineArgs
+        self._async_engine_class = AsyncLLMEngine
         self.model_name = os.path.basename(model_path)
         self.max_inflight = max(1, int(max_inflight))
         self.gen_config = SamplingParams(max_tokens=10000, temperature=0)
@@ -281,7 +279,7 @@ class MonkeyOCRv2_AsyncParsing:
         try:
             engine_kwargs = dict(self._engine_kwargs)
             engine_kwargs["mm_processor_kwargs"] = {"use_fast": True}
-            AsyncEngineArgs(**engine_kwargs)
+            self._async_engine_args_class(**engine_kwargs)
             self._engine_kwargs = engine_kwargs
         except TypeError:
             self._engine_kwargs.pop("mm_processor_kwargs", None)
@@ -291,7 +289,7 @@ class MonkeyOCRv2_AsyncParsing:
         self._run_coro(self._init_engine())
 
     def _auto_gpu_mem_ratio(self, ratio):
-        mem_free, mem_total = torch.cuda.mem_get_info()
+        mem_free, mem_total = self._torch.cuda.mem_get_info()
         return ratio * mem_free / mem_total
 
     def _run_loop(self):
@@ -305,8 +303,8 @@ class MonkeyOCRv2_AsyncParsing:
         return future.result(timeout=timeout)
 
     async def _init_engine(self):
-        engine_args = AsyncEngineArgs(**self._engine_kwargs)
-        self.engine = AsyncLLMEngine.from_engine_args(engine_args)
+        engine_args = self._async_engine_args_class(**self._engine_kwargs)
+        self.engine = self._async_engine_class.from_engine_args(engine_args)
         self._async_inflight = asyncio.Semaphore(self.max_inflight)
 
     async def _generate_one(

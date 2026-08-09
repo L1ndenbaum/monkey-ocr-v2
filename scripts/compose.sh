@@ -22,20 +22,17 @@ set +a
 
 case "$MONKEYOCR_PROFILE" in
     standard) ;;
-    dflash)
-        if [[ -z ${MONKEYOCR_DRAFT_MODEL_PATH:-} ]]; then
-            echo "DFlash profile requires MONKEYOCR_DRAFT_MODEL_PATH in dotenv/.env.vllm." >&2
-            exit 1
-        fi
-        ;;
     *)
-        echo "MONKEYOCR_PROFILE must be standard or dflash." >&2
+        echo "Docker production services support only MONKEYOCR_PROFILE=standard." >&2
+        echo "Use the explicit research/DFlash CLI extras outside this Compose stack." >&2
         exit 1
         ;;
 esac
 
-MONKEYOCR_IMAGE=${MONKEYOCR_IMAGE:-monkeyocr:$MONKEYOCR_PROFILE}
-export MONKEYOCR_IMAGE
+legacy_image=${MONKEYOCR_IMAGE:-}
+MONKEYOCR_API_IMAGE=${MONKEYOCR_API_IMAGE:-${legacy_image:-monkeyocr:api-standard}}
+MONKEYOCR_VLLM_IMAGE=${MONKEYOCR_VLLM_IMAGE:-${legacy_image:-monkeyocr:vllm-standard}}
+export MONKEYOCR_API_IMAGE MONKEYOCR_VLLM_IMAGE
 
 exec docker compose \
     --project-directory "$repo_root" \

@@ -1,5 +1,3 @@
-from monkeyocr.infrastructure.modeling import monkeyocr_vllm  # noqa: F401
-
 import ast
 import os
 import json
@@ -25,17 +23,6 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Union
 from urllib.parse import urlparse, urlunparse
-from vllm import SamplingParams
-
-try:
-    from vllm.engine.async_llm_engine import AsyncLLMEngine
-    from vllm.engine.arg_utils import AsyncEngineArgs
-except Exception:
-    try:
-        from vllm import AsyncLLMEngine, AsyncEngineArgs
-    except Exception:
-        AsyncLLMEngine = None
-        AsyncEngineArgs = None
 from PIL import Image, ImageFile, ImageDraw, ImageOps
 
 try:
@@ -836,6 +823,8 @@ class BackendManager:
                         f"Using vLLM server backend: {config.server_url} model={config.served_model_name}"
                     )
                 else:
+                    from monkeyocr.infrastructure.modeling import monkeyocr_vllm  # noqa: F401
+
                     warnings.warn(
                         "--server-url was not provided; using local vLLM AsyncLLMEngine as the "
                         f"fallback inference backend with model: {config.model_path}",

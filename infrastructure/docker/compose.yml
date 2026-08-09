@@ -4,7 +4,6 @@ x-monkeyocr-build: &monkeyocr-build
   context: .
   dockerfile: infrastructure/docker/Dockerfile
   args:
-    INFERENCE_PROFILE: ${MONKEYOCR_PROFILE:-standard}
     HTTP_PROXY: ${HTTP_PROXY:-}
     HTTPS_PROXY: ${HTTPS_PROXY:-}
     NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,api,vllm}
@@ -13,10 +12,7 @@ x-monkeyocr-build: &monkeyocr-build
     - host.docker.internal:host-gateway
 
 x-monkeyocr-service: &monkeyocr-service
-  image: ${MONKEYOCR_IMAGE:-monkeyocr:standard}
-  build: *monkeyocr-build
   restart: unless-stopped
-  init: true
   user: ${MONKEYOCR_UID:-1000}:${MONKEYOCR_GID:-1000}
   extra_hosts:
     - host.docker.internal:host-gateway
@@ -38,6 +34,10 @@ x-monkeyocr-service: &monkeyocr-service
 services:
   vllm:
     <<: *monkeyocr-service
+    image: ${MONKEYOCR_VLLM_IMAGE:-monkeyocr:vllm-standard}
+    build:
+      <<: *monkeyocr-build
+      target: vllm
     command: ["monkeyocr-vllm"]
     env_file:
       - ./dotenv/.env.vllm
@@ -54,6 +54,10 @@ services:
 
   api:
     <<: *monkeyocr-service
+    image: ${MONKEYOCR_API_IMAGE:-monkeyocr:api-standard}
+    build:
+      <<: *monkeyocr-build
+      target: api
     command: ["monkeyocr-api"]
     env_file:
       - ./dotenv/.env.api
