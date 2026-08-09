@@ -63,22 +63,15 @@ RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
 
 FROM api-environment AS api-thin-environment
 
-RUN site_packages=/opt/venv/lib/python3.11/site-packages \
-    && find "$site_packages" -mindepth 1 -maxdepth 1 \
-        \( -name 'functorch' \
-        -o -name 'nvidia' \
-        -o -name 'nvidia_*.dist-info' \
-        -o -name 'torch' \
-        -o -name 'torch-*.dist-info' \
-        -o -name 'torchaudio' \
-        -o -name 'torchaudio-*.dist-info' \
-        -o -name 'torchgen' \
-        -o -name 'torchvision' \
-        -o -name 'torchvision-*.dist-info' \
-        -o -name 'torchvision.libs' \
-        -o -name 'triton' \
-        -o -name 'triton-*.dist-info' \) \
-        -exec rm -rf {} +
+COPY infrastructure/docker/requirements /tmp/sharded-requirements
+COPY infrastructure/docker/strip_sharded_packages.py /tmp/strip_sharded_packages.py
+
+RUN /opt/venv/bin/python /tmp/strip_sharded_packages.py \
+        --site-packages /opt/venv/lib/python3.11/site-packages \
+        --requirement /tmp/sharded-requirements/standard-cuda-core.txt \
+        --requirement /tmp/sharded-requirements/standard-cuda-math.txt \
+        --requirement /tmp/sharded-requirements/standard-cuda-solver.txt \
+        --requirement /tmp/sharded-requirements/standard-torch.txt
 
 FROM python-builder AS vllm-environment
 
@@ -101,22 +94,15 @@ RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
 
 FROM vllm-environment AS vllm-thin-environment
 
-RUN site_packages=/opt/venv/lib/python3.11/site-packages \
-    && find "$site_packages" -mindepth 1 -maxdepth 1 \
-        \( -name 'functorch' \
-        -o -name 'nvidia' \
-        -o -name 'nvidia_*.dist-info' \
-        -o -name 'torch' \
-        -o -name 'torch-*.dist-info' \
-        -o -name 'torchaudio' \
-        -o -name 'torchaudio-*.dist-info' \
-        -o -name 'torchgen' \
-        -o -name 'torchvision' \
-        -o -name 'torchvision-*.dist-info' \
-        -o -name 'torchvision.libs' \
-        -o -name 'triton' \
-        -o -name 'triton-*.dist-info' \) \
-        -exec rm -rf {} +
+COPY infrastructure/docker/requirements /tmp/sharded-requirements
+COPY infrastructure/docker/strip_sharded_packages.py /tmp/strip_sharded_packages.py
+
+RUN /opt/venv/bin/python /tmp/strip_sharded_packages.py \
+        --site-packages /opt/venv/lib/python3.11/site-packages \
+        --requirement /tmp/sharded-requirements/standard-cuda-core.txt \
+        --requirement /tmp/sharded-requirements/standard-cuda-math.txt \
+        --requirement /tmp/sharded-requirements/standard-cuda-solver.txt \
+        --requirement /tmp/sharded-requirements/standard-torch.txt
 
 FROM ${CUDA_RUNTIME_IMAGE} AS api
 
