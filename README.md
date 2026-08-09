@@ -331,10 +331,10 @@ scripts/compose.sh ps
 
 The API target uses pinned CUDA 12.8 `runtime`; vLLM uses pinned CUDA 12.8
 `devel` because its kernels may JIT at runtime. cuDNN comes from the locked
-PyTorch wheel rather than a `cudnn-devel` base. Large CUDA/Torch packages are
-split across layers, and apt metadata, uv's managed Python download, and wheel
-downloads use BuildKit cache mounts. The API is available only at
-`127.0.0.1:8000` until host Nginx is installed.
+PyTorch wheel rather than a `cudnn-devel` base. Each target installs its
+complete frozen dependency environment directly; apt metadata, uv's managed
+Python download, and wheel downloads use BuildKit cache mounts. The API is
+available only at `127.0.0.1:8000` until host Nginx is installed.
 
 ### 4. Call the authenticated API
 

@@ -93,7 +93,7 @@ def parse_args() -> argparse.Namespace:
         help="Pinned base image whose upstream layers are excluded from the layer budget",
     )
     parser.add_argument("--max-total-gib", required=True, type=float)
-    parser.add_argument("--max-layer-gib", required=True, type=float)
+    parser.add_argument("--max-layer-gib", type=float)
     return parser.parse_args()
 
 
@@ -116,7 +116,7 @@ def main() -> None:
     failures: list[str] = []
     if total_gib > args.max_total_gib:
         failures.append(f"total {total_gib:.2f} GiB exceeds {args.max_total_gib:.2f} GiB")
-    if largest_gib > args.max_layer_gib:
+    if args.max_layer_gib is not None and largest_gib > args.max_layer_gib:
         failures.append(
             f"largest managed layer {largest_gib:.2f} GiB exceeds {args.max_layer_gib:.2f} GiB"
         )

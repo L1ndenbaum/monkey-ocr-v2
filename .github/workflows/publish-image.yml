@@ -127,8 +127,7 @@ jobs:
           python scripts/check_image_size.py \
             "$IMAGE_REFERENCE" \
             --base-reference '${{ matrix.base_reference }}' \
-            --max-total-gib '${{ matrix.max_total_gib }}' \
-            --max-layer-gib 2
+            --max-total-gib '${{ matrix.max_total_gib }}'
 
       - name: Publish summary
         run: |

@@ -12,11 +12,17 @@ from transformers.models.qwen2_vl import Qwen2VLProcessor
 from vllm import ModelRegistry
 from vllm.config import VllmConfig
 from vllm.config.multimodal import BaseDummyOptions
-from vllm.model_executor.models.vision import get_vit_attn_backend as _get_vit_attn_backend
 
-from monkeyocr.infrastructure.modeling.vllm_compat import load_attention_backend_enum
+from monkeyocr.infrastructure.modeling.vllm_compat import (
+    load_multimodal_data_dict,
+    load_vision_api,
+)
 
-AttentionBackendEnum = load_attention_backend_enum()
+(
+    AttentionBackendEnum,
+    _get_vit_attn_backend,
+    run_dp_sharded_mrope_vision_model,
+) = load_vision_api()
 
 def get_vit_attn_backend(head_size, dtype, attn_backend_override=None):
     return _get_vit_attn_backend(head_size=head_size, dtype=dtype)
@@ -64,13 +70,12 @@ from vllm.model_executor.models.utils import (
     maybe_prefix,
 )
 from vllm.multimodal import MULTIMODAL_REGISTRY
-from vllm.inputs import MultiModalDataDict
 from vllm.sequence import IntermediateTensors
 from vllm.utils.tensor_schema import TensorSchema, TensorShape
 
-from vllm.model_executor.models.vision import run_dp_sharded_mrope_vision_model
-
 from transformers import PretrainedConfig, Qwen3Config
+
+MultiModalDataDict = load_multimodal_data_dict()
 
 IMAGE_TOKEN = "<|image_pad|>"
 

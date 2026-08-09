@@ -119,9 +119,10 @@ scripts/compose.sh logs -f vllm api
 ```
 
 The API image uses the CUDA 12.8 runtime base and excludes vLLM. The vLLM
-image keeps the CUDA 12.8 devel toolchain for runtime kernel JIT. Both reuse the
-same locked CUDA/PyTorch wheel layers; cuDNN is supplied by PyTorch rather than
-the NVIDIA `cudnn-devel` base.
+image keeps the CUDA 12.8 devel toolchain for runtime kernel JIT. Each image
+installs its complete frozen environment without deleting or reconstructing
+Python distributions; cuDNN is supplied by PyTorch rather than the NVIDIA
+`cudnn-devel` base.
 
 Verify the loopback API before enabling the public proxy:
 
