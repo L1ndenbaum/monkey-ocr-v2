@@ -14,6 +14,8 @@ x-monkeyocr-build: &monkeyocr-build
 x-monkeyocr-service: &monkeyocr-service
   restart: unless-stopped
   user: ${MONKEYOCR_UID:-1000}:${MONKEYOCR_GID:-1000}
+  environment:
+    HOME: /home/monkeyocr
   extra_hosts:
     - host.docker.internal:host-gateway
   gpus: all
@@ -25,6 +27,8 @@ x-monkeyocr-service: &monkeyocr-service
     - no-new-privileges:true
   tmpfs:
     - /tmp:rw,noexec,nosuid,size=1g
+    # Transformers copies trusted model modules here; vLLM may also load compiled cache files.
+    - /home/monkeyocr:rw,nosuid,nodev,size=2g,uid=${MONKEYOCR_UID:-1000},gid=${MONKEYOCR_GID:-1000},mode=0700
   logging:
     driver: json-file
     options:
