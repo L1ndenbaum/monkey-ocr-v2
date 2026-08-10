@@ -556,15 +556,13 @@ wheels = [
 name = "fastapi"
 version = "0.136.3"
 source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "platform_machine == 'x86_64' and sys_platform == 'linux'",
-]
 dependencies = [
-    { name = "annotated-doc", marker = "extra == 'extra-9-monkeyocr-dflash'" },
-    { name = "pydantic", marker = "extra == 'extra-9-monkeyocr-dflash'" },
+    { name = "annotated-doc" },
+    { name = "pydantic" },
+    { name = "starlette", version = "0.52.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-9-monkeyocr-demo' or extra != 'extra-9-monkeyocr-dflash' or (extra == 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-research') or (extra == 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-standard') or (extra == 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-standard-runtime')" },
     { name = "starlette", version = "1.4.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-9-monkeyocr-dflash'" },
-    { name = "typing-extensions", marker = "extra == 'extra-9-monkeyocr-dflash'" },
-    { name = "typing-inspection", marker = "extra == 'extra-9-monkeyocr-dflash'" },
+    { name = "typing-extensions" },
+    { name = "typing-inspection" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/81/2d/ff8d91d7b564d464629a0fd50a4489c97fcb836ac230bf3a7269232a9b1f/fastapi-0.136.3.tar.gz", hash = "sha256:e487fae93ad408e6f47641ee4dfe389864fd7bec92e547ea8498fc13f43e83ab", size = 396410, upload-time = "2026-05-23T18:53:15.192Z" }
 wheels = [
@@ -574,46 +572,14 @@ wheels = [
 [package.optional-dependencies]
 standard = [
     { name = "email-validator" },
-    { name = "fastapi-cli", extra = ["standard"], marker = "extra == 'extra-9-monkeyocr-dflash'" },
+    { name = "fastapi-cli", extra = ["standard"], marker = "extra == 'extra-9-monkeyocr-dflash' or extra == 'extra-9-monkeyocr-standard'" },
     { name = "fastar" },
     { name = "httpx" },
     { name = "jinja2" },
     { name = "pydantic-extra-types" },
     { name = "pydantic-settings" },
     { name = "python-multipart" },
-    { name = "uvicorn", extra = ["standard"], marker = "extra == 'extra-9-monkeyocr-dflash'" },
-]
-
-[[package]]
-name = "fastapi"
-version = "0.141.1"
-source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "platform_machine == 'x86_64' and sys_platform == 'linux'",
-]
-dependencies = [
-    { name = "annotated-doc", marker = "extra == 'extra-9-monkeyocr-demo' or extra != 'extra-9-monkeyocr-dflash' or (extra == 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-research') or (extra == 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-standard') or (extra == 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-standard-runtime')" },
-    { name = "pydantic", marker = "extra == 'extra-9-monkeyocr-demo' or extra != 'extra-9-monkeyocr-dflash' or (extra == 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-research') or (extra == 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-standard') or (extra == 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-standard-runtime')" },
-    { name = "starlette", version = "0.52.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-9-monkeyocr-demo' or extra != 'extra-9-monkeyocr-dflash' or (extra == 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-research') or (extra == 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-standard') or (extra == 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-standard-runtime')" },
-    { name = "typing-extensions", marker = "extra == 'extra-9-monkeyocr-demo' or extra != 'extra-9-monkeyocr-dflash' or (extra == 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-research') or (extra == 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-standard') or (extra == 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-standard-runtime')" },
-    { name = "typing-inspection", marker = "extra == 'extra-9-monkeyocr-demo' or extra != 'extra-9-monkeyocr-dflash' or (extra == 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-research') or (extra == 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-standard') or (extra == 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-standard-runtime')" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/8a/02/91e3416a8fdd715abb903a952a6bec7cdd8d14eed55d415fc8595524c319/fastapi-0.141.1.tar.gz", hash = "sha256:e8822fc40db1e1858054d7a949a888695bc9bdce70139178e33bd2871a453ca1", size = 425799, upload-time = "2026-07-29T17:18:05.568Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/cb/03/10388a42375ee7e4ac9b94eb2c5c569c8b5795e377e701c9ac3ad63de890/fastapi-0.141.1-py3-none-any.whl", hash = "sha256:bfb91aa2d334c61cb35ba9a116fc123b3d3df31640b801cf57a7a78ec3f603b3", size = 131954, upload-time = "2026-07-29T17:18:04.364Z" },
-]
-
-[package.optional-dependencies]
-standard = [
-    { name = "email-validator" },
-    { name = "fastapi-cli", extra = ["standard"], marker = "(extra == 'extra-9-monkeyocr-demo' and extra == 'extra-9-monkeyocr-dflash') or (extra == 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-research') or (extra != 'extra-9-monkeyocr-research' and extra == 'extra-9-monkeyocr-standard') or (extra != 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-standard') or (extra == 'extra-9-monkeyocr-dflash' and extra != 'extra-9-monkeyocr-standard' and extra == 'extra-9-monkeyocr-standard-runtime')" },
-    { name = "fastar" },
-    { name = "httpx" },
-    { name = "jinja2" },
-    { name = "pydantic-extra-types" },
-    { name = "pydantic-settings" },
-    { name = "python-multipart" },
-    { name = "uvicorn", extra = ["standard"], marker = "(extra == 'extra-9-monkeyocr-demo' and extra == 'extra-9-monkeyocr-dflash') or (extra == 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-research') or (extra != 'extra-9-monkeyocr-research' and extra == 'extra-9-monkeyocr-standard') or (extra != 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-standard') or (extra == 'extra-9-monkeyocr-dflash' and extra != 'extra-9-monkeyocr-standard' and extra == 'extra-9-monkeyocr-standard-runtime')" },
+    { name = "uvicorn", extra = ["standard"], marker = "extra == 'extra-9-monkeyocr-dflash' or extra == 'extra-9-monkeyocr-standard'" },
 ]
 
 [[package]]
@@ -816,7 +782,7 @@ dependencies = [
     { name = "aiofiles" },
     { name = "anyio" },
     { name = "brotli" },
-    { name = "fastapi", version = "0.141.1", source = { registry = "https://pypi.org/simple" } },
+    { name = "fastapi" },
     { name = "ffmpy" },
     { name = "gradio-client" },
     { name = "groovy" },
@@ -1342,8 +1308,7 @@ name = "model-hosting-container-standards"
 version = "0.1.16"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "fastapi", version = "0.136.3", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-9-monkeyocr-dflash'" },
-    { name = "fastapi", version = "0.141.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-9-monkeyocr-demo' and extra == 'extra-9-monkeyocr-dflash') or (extra == 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-research') or (extra != 'extra-9-monkeyocr-research' and extra == 'extra-9-monkeyocr-standard') or (extra != 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-standard') or (extra == 'extra-9-monkeyocr-dflash' and extra != 'extra-9-monkeyocr-standard' and extra == 'extra-9-monkeyocr-standard-runtime')" },
+    { name = "fastapi" },
     { name = "httpx" },
     { name = "jmespath" },
     { name = "pydantic" },
@@ -1397,8 +1362,7 @@ version = "2.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiofiles" },
-    { name = "fastapi", version = "0.136.3", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-9-monkeyocr-dflash'" },
-    { name = "fastapi", version = "0.141.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-9-monkeyocr-demo' or extra != 'extra-9-monkeyocr-dflash' or (extra == 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-research') or (extra == 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-standard') or (extra == 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-standard-runtime')" },
+    { name = "fastapi" },
     { name = "pydantic" },
     { name = "pypdf" },
     { name = "python-multipart" },
@@ -1457,7 +1421,7 @@ requires-dist = [
     { name = "aiofiles", specifier = ">=24.1,<25" },
     { name = "beautifulsoup4", marker = "extra == 'training'", specifier = ">=4.13,<5" },
     { name = "einops", marker = "extra == 'research'", specifier = ">=0.8,<1" },
-    { name = "fastapi", specifier = ">=0.116,<1" },
+    { name = "fastapi", specifier = ">=0.116,<0.137" },
     { name = "gradio", marker = "extra == 'demo'", specifier = ">=5.35,<6" },
     { name = "huggingface-hub", marker = "extra == 'research'", specifier = ">=0.33,<1" },
     { name = "modelscope", marker = "extra == 'research'", specifier = ">=1.27,<2" },
@@ -3499,7 +3463,7 @@ dependencies = [
     { name = "depyf" },
     { name = "diskcache" },
     { name = "einops" },
-    { name = "fastapi", version = "0.141.1", source = { registry = "https://pypi.org/simple" }, extra = ["standard"], marker = "(extra == 'extra-9-monkeyocr-demo' and extra == 'extra-9-monkeyocr-dflash') or (extra == 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-research') or (extra != 'extra-9-monkeyocr-research' and extra == 'extra-9-monkeyocr-standard') or (extra != 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-standard') or (extra == 'extra-9-monkeyocr-dflash' and extra != 'extra-9-monkeyocr-standard' and extra == 'extra-9-monkeyocr-standard-runtime')" },
+    { name = "fastapi", extra = ["standard"], marker = "(extra == 'extra-9-monkeyocr-demo' and extra == 'extra-9-monkeyocr-dflash') or (extra == 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-research') or (extra != 'extra-9-monkeyocr-research' and extra == 'extra-9-monkeyocr-standard') or (extra != 'extra-9-monkeyocr-dflash' and extra == 'extra-9-monkeyocr-standard') or (extra == 'extra-9-monkeyocr-dflash' and extra != 'extra-9-monkeyocr-standard' and extra == 'extra-9-monkeyocr-standard-runtime')" },
     { name = "filelock" },
     { name = "flashinfer-python", version = "0.5.2", source = { registry = "https://pypi.org/simple" } },
     { name = "gguf" },
@@ -3570,7 +3534,7 @@ dependencies = [
     { name = "depyf" },
     { name = "diskcache" },
     { name = "einops" },
-    { name = "fastapi", version = "0.136.3", source = { registry = "https://pypi.org/simple" }, extra = ["standard"], marker = "extra == 'extra-9-monkeyocr-dflash'" },
+    { name = "fastapi", extra = ["standard"], marker = "extra == 'extra-9-monkeyocr-dflash'" },
     { name = "fastsafetensors" },
     { name = "filelock" },
     { name = "flashinfer-cubin" },

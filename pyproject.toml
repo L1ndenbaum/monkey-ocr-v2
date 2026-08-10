@@ -11,7 +11,8 @@ requires-python = ">=3.11,<3.12"
 license = { file = "LICENSE" }
 dependencies = [
     "aiofiles>=24.1,<25",
-    "fastapi>=0.116,<1",
+    # vLLM 0.11.2's Prometheus middleware cannot traverse FastAPI 0.137+ routers.
+    "fastapi>=0.116,<0.137",
     "pydantic>=2.11,<3",
     "pypdf>=5.7,<7",
     "python-multipart>=0.0.20,<1",
