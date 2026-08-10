@@ -14,8 +14,6 @@ x-monkeyocr-build: &monkeyocr-build
 x-monkeyocr-service: &monkeyocr-service
   restart: unless-stopped
   user: ${MONKEYOCR_UID:-1000}:${MONKEYOCR_GID:-1000}
-  environment:
-    HOME: /home/monkeyocr
   extra_hosts:
     - host.docker.internal:host-gateway
   gpus: all
@@ -27,8 +25,6 @@ x-monkeyocr-service: &monkeyocr-service
     - no-new-privileges:true
   tmpfs:
     - /tmp:rw,noexec,nosuid,size=1g
-    # Transformers copies trusted model modules here; vLLM may also load compiled cache files.
-    - /home/monkeyocr:rw,nosuid,nodev,size=2g,uid=${MONKEYOCR_UID:-1000},gid=${MONKEYOCR_GID:-1000},mode=0700
   logging:
     driver: json-file
     options:
@@ -43,8 +39,14 @@ services:
       <<: *monkeyocr-build
       target: vllm
     command: ["monkeyocr-vllm"]
+    environment:
+      HOME: /home/monkeyocr
     env_file:
       - ./dotenv/.env.vllm
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=1g
+      # Triton compiles trusted CUDA helpers into this cache and loads them as shared objects.
+      - /home/monkeyocr:rw,exec,nosuid,nodev,size=2g,uid=${MONKEYOCR_UID:-1000},gid=${MONKEYOCR_GID:-1000},mode=0700
     volumes:
       - ${MONKEYOCR_MODEL_ROOT:-./model_weight}:/models:ro
     expose:
