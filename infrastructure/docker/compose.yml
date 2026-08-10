@@ -41,6 +41,11 @@ services:
     command: ["monkeyocr-vllm"]
     environment:
       HOME: /home/monkeyocr
+      # PyTorch resolves a username before honoring its cache override.
+      USER: monkeyocr
+      # Keep generated code and import-time precompiled headers off noexec /tmp.
+      TMPDIR: /home/monkeyocr
+      TORCHINDUCTOR_CACHE_DIR: /home/monkeyocr/.cache/torch_inductor
     env_file:
       - ./dotenv/.env.vllm
     tmpfs:

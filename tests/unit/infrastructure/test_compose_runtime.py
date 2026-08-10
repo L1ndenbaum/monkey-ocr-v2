@@ -9,6 +9,9 @@ def test_vllm_has_an_executable_runtime_cache_on_a_read_only_root() -> None:
 
     assert "read_only: true" in compose
     assert "HOME: /home/monkeyocr" in compose
+    assert "USER: monkeyocr" in compose
+    assert "TMPDIR: /home/monkeyocr" in compose
+    assert "TORCHINDUCTOR_CACHE_DIR: /home/monkeyocr/.cache/torch_inductor" in compose
     assert (
         "/home/monkeyocr:rw,exec,nosuid,nodev,size=2g,"
         "uid=${MONKEYOCR_UID:-1000},gid=${MONKEYOCR_GID:-1000},mode=0700"
