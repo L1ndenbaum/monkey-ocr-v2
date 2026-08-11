@@ -231,14 +231,16 @@ src/monkeyocr/
 ```
 
 The production deployment keeps the public entrypoint on a separate Caddy
-server and runs two GPU containers on the private OCR host:
+server and runs two GPU services plus a CPU-only internal Web service on the
+private OCR host:
 
 ```text
-Internet -> Caddy :443 -> private network -> OCR API :8000 -> internal vLLM :8888
+Internet -> Caddy :443 -> /api/v1 -> OCR API -> internal vLLM :8888
+                         /ocr-ui -> React + Web BFF -> OCR API
 ```
 
-Bind the API to the OCR host's exact private address and allow that port only
-from the Caddy host. vLLM has no host port, and every `/api/v1` request
+Bind the API and Web ports to the OCR host's exact private address and allow
+them only from the Caddy host. vLLM has no host port, and every `/api/v1` request
 (including artifact downloads) requires the one configured Bearer token.
 TLS, public routing, and edge traffic controls belong to the Caddy deployment,
 not this repository.
@@ -262,18 +264,20 @@ model/result directories. Build proxies are already configured in
 ```dotenv
 HTTP_PROXY=http://host.docker.internal:9090
 HTTPS_PROXY=http://host.docker.internal:9090
+MONKEYOCR_BUILD_PROXY=http://host.docker.internal:9090
 ```
 
 Both Docker build and runtime configuration add
 `host.docker.internal:host-gateway`; the wrapper does not rewrite proxy URLs.
-Clear both proxy values on a server that has no proxy listening on host port
-9090. Build-only values are passed to Compose without becoming Docker CLI
-proxy settings.
+`MONKEYOCR_BUILD_PROXY` supplies both Dockerfile proxy arguments without
+exporting the container-only hostname to the Docker client. Clear it and both
+standard proxy values on a server that has no proxy listening on host port
+9090.
 
-Edit `dotenv/.env.compose`, `dotenv/.env.api`, and `dotenv/.env.vllm` for the
-server before building. Keep `MONKEYOCR_API_PORT=8000` in `.env.api`; the host
-binding is controlled separately by `MONKEYOCR_API_BIND_ADDRESS` and
-`MONKEYOCR_API_HOST_PORT` in `.env.compose`.
+Edit `dotenv/.env.compose`, `dotenv/.env.api`, `dotenv/.env.vllm`, and
+`dotenv/.env.web` for the server before building. Keep the API container on
+port 8000 and Web container on port 8080; their OCR-host bindings are selected
+independently in `.env.compose`.
 
 ### 2. Download model weights
 
@@ -296,24 +300,27 @@ profile uses vLLM 0.11.2.
 
 ### 3. Pull or build the production image
 
-The `Publish production images` GitHub Actions workflow builds separate API
-and vLLM targets and publishes them as:
+The GitHub Actions workflows build separate API, vLLM, and Web images and
+publish them as:
 
 ```text
 ghcr.io/l1ndenbaum/monkey-ocr-v2:api-standard
 ghcr.io/l1ndenbaum/monkey-ocr-v2:api-standard-sha-<full-git-sha>
 ghcr.io/l1ndenbaum/monkey-ocr-v2:vllm-standard
 ghcr.io/l1ndenbaum/monkey-ocr-v2:vllm-standard-sha-<full-git-sha>
+ghcr.io/l1ndenbaum/monkey-ocr-v2:web
+ghcr.io/l1ndenbaum/monkey-ocr-v2:web-sha-<full-git-sha>
 ```
 
 The legacy `standard` tag remains an alias for the complete vLLM image. For an
-immutable production deployment, copy both digests from the workflow summaries
-and set them in `dotenv/.env.compose`:
+immutable production deployment, copy all three digests from the workflow
+summaries and set them in `dotenv/.env.compose`:
 
 ```dotenv
 MONKEYOCR_PROFILE=standard
 MONKEYOCR_API_IMAGE=ghcr.io/l1ndenbaum/monkey-ocr-v2@sha256:<api-digest>
 MONKEYOCR_VLLM_IMAGE=ghcr.io/l1ndenbaum/monkey-ocr-v2@sha256:<vllm-digest>
+MONKEYOCR_WEB_IMAGE=ghcr.io/l1ndenbaum/monkey-ocr-v2@sha256:<web-digest>
 ```
 
 Then pull and start without invoking a local build:
@@ -338,9 +345,10 @@ The API target uses pinned CUDA 12.8 `runtime`; vLLM uses pinned CUDA 12.8
 `devel` because its kernels may JIT at runtime. cuDNN comes from the locked
 PyTorch wheel rather than a `cudnn-devel` base. Each target installs its
 complete frozen dependency environment directly; apt metadata, uv's managed
-Python download, and wheel downloads use BuildKit cache mounts. The API is
-available at `127.0.0.1:8000` by default. Production should bind it to the OCR
-host's exact private IP for access from the separate Caddy server.
+Python download, npm packages, and Python wheels use BuildKit cache mounts. The
+Web image uses pinned Node and Python slim build/runtime stages and requests no
+GPU. API and Web bind to `127.0.0.1` by default. Production should bind both to
+the OCR host's exact private IP for access from the separate Caddy server.
 
 ### 4. Call the authenticated API
 
@@ -358,6 +366,13 @@ Public routes are:
 - `POST /api/v1/parse` for PDF or image parsing.
 - `POST /api/v1/ocr/{task}` where `task` is `text`, `formula`, or `table`.
 - `GET /api/v1/artifacts/{request_id}/download` for the protected ZIP.
+
+The internal workspace is served by Caddy at `/ocr-ui/` and covers single-file
+PDF/image preview, PDF page selection, region cropping for text/formula/table,
+session task status, safe Markdown/JSON previews, copy, and protected ZIP
+downloads. Caddy Basic Auth protects the page; the browser never receives the
+OCR Bearer token. See [production deployment](docs/deployment.md) for the
+two-server configuration.
 
 JSON responses use one envelope:
 

@@ -4,7 +4,7 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 dotenv_dir="$repo_root/dotenv"
 
-for role in build compose api vllm; do
+for role in build compose api vllm web; do
     destination="$dotenv_dir/.env.$role"
     if [[ ! -e "$destination" ]]; then
         cp "$destination.example" "$destination"
@@ -20,6 +20,6 @@ if [[ ! -s "$secret_file" ]]; then
 fi
 chmod 600 "$secret_file"
 
-install -d "$repo_root/model_weight" "$repo_root/output/api"
+install -d "$repo_root/model_weight" "$repo_root/output/api" "$repo_root/output/web"
 
 echo "Initialized local dotenv files and Bearer token under $dotenv_dir"

@@ -4,9 +4,20 @@ x-monkeyocr-build: &monkeyocr-build
   context: .
   dockerfile: infrastructure/docker/Dockerfile
   args:
-    HTTP_PROXY: ${HTTP_PROXY:-}
-    HTTPS_PROXY: ${HTTPS_PROXY:-}
-    NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,api,vllm}
+    HTTP_PROXY: ${MONKEYOCR_BUILD_PROXY:-}
+    HTTPS_PROXY: ${MONKEYOCR_BUILD_PROXY:-}
+    NO_PROXY: ${MONKEYOCR_BUILD_NO_PROXY:-localhost,127.0.0.1,api,vllm,web}
+    UV_INDEX_URL: ${UV_INDEX_URL:-https://pypi.org/simple}
+  extra_hosts:
+    - host.docker.internal:host-gateway
+
+x-monkeyocr-web-build: &monkeyocr-web-build
+  context: .
+  dockerfile: infrastructure/docker/Dockerfile.web
+  args:
+    HTTP_PROXY: ${MONKEYOCR_BUILD_PROXY:-}
+    HTTPS_PROXY: ${MONKEYOCR_BUILD_PROXY:-}
+    NO_PROXY: ${MONKEYOCR_BUILD_NO_PROXY:-localhost,127.0.0.1,api,vllm,web}
     UV_INDEX_URL: ${UV_INDEX_URL:-https://pypi.org/simple}
   extra_hosts:
     - host.docker.internal:host-gateway
@@ -16,8 +27,6 @@ x-monkeyocr-service: &monkeyocr-service
   user: ${MONKEYOCR_UID:-1000}:${MONKEYOCR_GID:-1000}
   extra_hosts:
     - host.docker.internal:host-gateway
-  gpus: all
-  shm_size: 8gb
   read_only: true
   cap_drop:
     - ALL
@@ -31,9 +40,14 @@ x-monkeyocr-service: &monkeyocr-service
       max-size: 20m
       max-file: "3"
 
+x-monkeyocr-gpu-service: &monkeyocr-gpu-service
+  <<: *monkeyocr-service
+  gpus: all
+  shm_size: 8gb
+
 services:
   vllm:
-    <<: *monkeyocr-service
+    <<: *monkeyocr-gpu-service
     image: ${MONKEYOCR_VLLM_IMAGE:-monkeyocr:vllm-standard}
     build:
       <<: *monkeyocr-build
@@ -64,7 +78,7 @@ services:
       start_period: 120s
 
   api:
-    <<: *monkeyocr-service
+    <<: *monkeyocr-gpu-service
     image: ${MONKEYOCR_API_IMAGE:-monkeyocr:api-standard}
     build:
       <<: *monkeyocr-build
@@ -92,6 +106,40 @@ services:
       timeout: 5s
       retries: 10
       start_period: 120s
+
+  web:
+    <<: *monkeyocr-service
+    image: ${MONKEYOCR_WEB_IMAGE:-monkeyocr:web}
+    build: *monkeyocr-web-build
+    init: true
+    command: ["monkeyocr-web"]
+    env_file:
+      - ./dotenv/.env.web
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - target: 8080
+        published: "${MONKEYOCR_WEB_HOST_PORT:-8080}"
+        host_ip: ${MONKEYOCR_WEB_BIND_ADDRESS:-127.0.0.1}
+        protocol: tcp
+    volumes:
+      - ${MONKEYOCR_WEB_RESULTS_ROOT:-./output/web}:/var/lib/monkeyocr-web/jobs
+    secrets:
+      - source: monkeyocr_api_token
+        target: monkeyocr_api_token
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/internal/health/ready', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
 secrets:
   monkeyocr_api_token:

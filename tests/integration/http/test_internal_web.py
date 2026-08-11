@@ -138,3 +138,19 @@ def test_status_health_and_missing_assets(tmp_path: Path) -> None:
     assert assets.status_code == 503
     assert unknown_api.status_code == 404
     assert "script-src 'self'" in assets.headers["content-security-policy"]
+
+
+def test_hashed_assets_are_cacheable_but_index_is_not(tmp_path: Path) -> None:
+    app, _gateway = _app(tmp_path)
+    static_root = tmp_path / "missing-static"
+    assets = static_root / "assets"
+    assets.mkdir(parents=True)
+    (static_root / "index.html").write_text("<html>workspace</html>", encoding="utf-8")
+    (assets / "app-hash.js").write_text("export {}", encoding="utf-8")
+
+    with TestClient(app) as client:
+        index = client.get("/")
+        script = client.get("/assets/app-hash.js")
+
+    assert index.headers["cache-control"] == "no-store"
+    assert script.headers["cache-control"] == "public, max-age=31536000, immutable"

@@ -107,7 +107,10 @@ def create_internal_web_app(
             session_id = secrets.token_urlsafe(32)
         request.state.web_session_id = session_id
         response = await call_next(request)
-        response.headers["Cache-Control"] = "no-store"
+        if request.url.path.startswith("/assets/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        else:
+            response.headers["Cache-Control"] = "no-store"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; script-src 'self'; connect-src 'self'; "
             "img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; "

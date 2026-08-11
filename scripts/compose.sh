@@ -8,7 +8,7 @@ if [[ ${1:-} == "init" ]]; then
     exec "$repo_root/scripts/init-env.sh"
 fi
 
-for required in .env.build .env.compose .env.api .env.vllm; do
+for required in .env.build .env.compose .env.api .env.vllm .env.web; do
     if [[ ! -f "$dotenv_dir/$required" ]]; then
         echo "Missing $dotenv_dir/$required; run scripts/compose.sh init first." >&2
         exit 1
@@ -36,7 +36,8 @@ if [[ -z ${MONKEYOCR_API_IMAGE:-} && -z ${MONKEYOCR_VLLM_IMAGE:-} && -n $legacy_
 fi
 MONKEYOCR_API_IMAGE=${MONKEYOCR_API_IMAGE:-monkeyocr:api-standard}
 MONKEYOCR_VLLM_IMAGE=${MONKEYOCR_VLLM_IMAGE:-monkeyocr:vllm-standard}
-export MONKEYOCR_API_IMAGE MONKEYOCR_VLLM_IMAGE
+MONKEYOCR_WEB_IMAGE=${MONKEYOCR_WEB_IMAGE:-monkeyocr:web}
+export MONKEYOCR_API_IMAGE MONKEYOCR_VLLM_IMAGE MONKEYOCR_WEB_IMAGE
 
 exec docker compose \
     --project-directory "$repo_root" \

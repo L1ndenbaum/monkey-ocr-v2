@@ -61,3 +61,16 @@ Fix every failure before committing. Infrastructure-only changes also require
 their targeted validation (for example `docker compose config` or Docker build
 checks) when the necessary tool is available. Commit only after the required
 checks pass.
+
+Changes below `frontend/` additionally require all of:
+
+```text
+npm --prefix frontend run lint
+npm --prefix frontend run format:check
+npm --prefix frontend run test
+npm --prefix frontend run build
+```
+
+Use `npm ci` from the committed lock file in CI and container builds. The
+browser must call only the same-origin Web BFF; never add the OCR Bearer token
+to frontend source, Vite variables, browser storage, or browser requests.

@@ -1,0 +1,113 @@
+name: Publish internal Web image
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+    paths:
+      - ".github/workflows/publish-web-image.yml"
+      - ".dockerignore"
+      - "frontend/**"
+      - "infrastructure/docker/Dockerfile.web"
+      - "src/monkeyocr/application/ports.py"
+      - "src/monkeyocr/application/web_jobs.py"
+      - "src/monkeyocr/infrastructure/config/web_settings.py"
+      - "src/monkeyocr/infrastructure/http/**"
+      - "src/monkeyocr/infrastructure/storage/web_jobs.py"
+      - "src/monkeyocr/interface/cli/web.py"
+      - "src/monkeyocr/interface/http/auth.py"
+      - "src/monkeyocr/interface/http/errors.py"
+      - "src/monkeyocr/interface/http/internal_web/**"
+      - "src/monkeyocr/interface/http/schemas.py"
+      - "src/monkeyocr/interface/http/uploads.py"
+      - "LICENSE"
+      - "README.md"
+      - "pyproject.toml"
+      - "uv.lock"
+
+concurrency:
+  group: publish-web-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  publish-web:
+    name: Build internal Web image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate image metadata
+        id: metadata
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=web,enable={{is_default_branch}}
+            type=sha,prefix=web-sha-,format=long
+            type=semver,pattern={{version}},prefix=web-
+          labels: |
+            org.opencontainers.image.title=MonkeyOCRv2 internal Web workspace
+            org.opencontainers.image.description=React OCR workspace and session-scoped BFF
+
+      - name: Build and push image
+        id: build
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: .
+          file: infrastructure/docker/Dockerfile.web
+          platforms: linux/amd64
+          push: true
+          pull: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          build-args: |
+            HTTP_PROXY=
+            HTTPS_PROXY=
+            NO_PROXY=localhost,127.0.0.1,api,vllm,web
+            UV_INDEX_URL=https://pypi.org/simple
+          cache-from: type=gha,scope=monkeyocr-web
+          cache-to: type=gha,mode=max,scope=monkeyocr-web,ignore-error=true
+          provenance: mode=max
+          sbom: true
+
+      - name: Enforce image size budget
+        env:
+          IMAGE_REFERENCE: ${{ fromJSON(steps.metadata.outputs.json).tags[0] }}@${{ steps.build.outputs.digest }}
+        run: |
+          python scripts/check_image_size.py \
+            "$IMAGE_REFERENCE" \
+            --base-reference 'python:3.11.15-slim-bookworm@sha256:d29f48a31a8b408ed19272ca1e7b10ebae13b240a27e862d3d4217c528e2e0c3' \
+            --max-total-gib 1.5
+
+      - name: Publish summary
+        run: |
+          {
+            echo "### Published MonkeyOCR internal Web image"
+            echo '```text'
+            echo '${{ steps.metadata.outputs.tags }}'
+            echo '```'
+            echo "Digest: \`${{ steps.build.outputs.digest }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

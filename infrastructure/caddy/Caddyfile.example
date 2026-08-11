@@ -1,0 +1,40 @@
+{
+	email operator@example.com
+	auto_https disable_redirects
+}
+
+https://203.0.113.10 {
+	redir /ocr-ui /ocr-ui/ 308
+
+	handle_path /ocr-ui/* {
+		basic_auth {
+			ocr {$OCR_UI_PASSWORD_HASH}
+		}
+
+		request_body {
+			max_size 55MiB
+		}
+
+		reverse_proxy http://10.0.0.20:6080 {
+			health_uri /internal/health/ready
+			health_interval 30s
+			health_timeout 5s
+		}
+	}
+
+	handle /api/v1/* {
+		request_body {
+			max_size 55MiB
+		}
+
+		reverse_proxy http://10.0.0.20:6000 {
+			health_uri /internal/health/ready
+			health_interval 30s
+			health_timeout 5s
+		}
+	}
+
+	handle {
+		respond 404
+	}
+}

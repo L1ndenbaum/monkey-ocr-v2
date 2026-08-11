@@ -107,3 +107,12 @@ def test_publish_workflow_uses_metadata_normalized_image_tag() -> None:
 
     assert "IMAGE_REFERENCE: ${{ fromJSON(steps.metadata.outputs.json).tags[0] }}@" in workflow
     assert "IMAGE_REFERENCE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@" not in workflow
+
+
+def test_web_publish_workflow_reuses_github_actions_cache() -> None:
+    workflow = (REPO_ROOT / ".github/workflows/publish-web-image.yml").read_text(encoding="utf-8")
+
+    assert "file: infrastructure/docker/Dockerfile.web" in workflow
+    assert "cache-from: type=gha,scope=monkeyocr-web" in workflow
+    assert "cache-to: type=gha,mode=max,scope=monkeyocr-web" in workflow
+    assert "--max-total-gib 1.5" in workflow
