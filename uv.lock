@@ -1404,6 +1404,9 @@ standard-runtime = [
 training = [
     { name = "beautifulsoup4" },
 ]
+web = [
+    { name = "httpx" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -1423,6 +1426,7 @@ requires-dist = [
     { name = "einops", marker = "extra == 'research'", specifier = ">=0.8,<1" },
     { name = "fastapi", specifier = ">=0.116,<0.137" },
     { name = "gradio", marker = "extra == 'demo'", specifier = ">=5.35,<6" },
+    { name = "httpx", marker = "extra == 'web'", specifier = ">=0.28,<1" },
     { name = "huggingface-hub", marker = "extra == 'research'", specifier = ">=0.33,<1" },
     { name = "modelscope", marker = "extra == 'research'", specifier = ">=1.27,<2" },
     { name = "numpy", marker = "extra == 'inference'", specifier = ">=1.26,<3" },
@@ -1444,7 +1448,7 @@ requires-dist = [
     { name = "vllm", marker = "extra == 'dflash'", specifier = "==0.25.1" },
     { name = "vllm", marker = "extra == 'standard'", specifier = "==0.11.2" },
 ]
-provides-extras = ["demo", "dflash", "inference", "research", "standard", "standard-runtime", "training"]
+provides-extras = ["demo", "dflash", "inference", "research", "standard", "standard-runtime", "training", "web"]
 
 [package.metadata.requires-dev]
 dev = [

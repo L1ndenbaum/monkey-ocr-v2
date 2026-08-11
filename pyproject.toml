@@ -45,6 +45,7 @@ standard-runtime = [
     "torchvision==0.24.0",
 ]
 training = ["beautifulsoup4>=4.13,<5"]
+web = ["httpx>=0.28,<1"]
 
 [project.scripts]
 monkeyocr-api = "monkeyocr.interface.cli.api:main"
@@ -55,6 +56,7 @@ monkeyocr-understanding = "monkeyocr.interface.cli.understanding:main"
 monkeyocr-vision = "monkeyocr.interface.cli.vision:main"
 monkeyocr-vision-vitae = "monkeyocr.interface.cli.vision_vitae:main"
 monkeyocr-vllm = "monkeyocr.interface.cli.vllm:main"
+monkeyocr-web = "monkeyocr.interface.cli.web:main"
 
 [dependency-groups]
 dev = [

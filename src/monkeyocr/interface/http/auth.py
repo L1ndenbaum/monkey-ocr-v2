@@ -14,6 +14,21 @@ from monkeyocr.interface.http.schemas import ApiEnvelope, InternalCode
 BEARER_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9\-._~+/]+=*$")
 
 
+def read_bearer_token(path: Path) -> str:
+    """Read and validate one token for a trusted server-side adapter."""
+    try:
+        raw = path.read_text(encoding="ascii")
+    except (OSError, UnicodeError) as exc:
+        raise RuntimeError(f"Bearer token secret is unavailable: {path}") from exc
+    if raw != raw.strip() or "\n" in raw or "\r" in raw:
+        raise ValueError("Bearer token secret must contain exactly one token without whitespace.")
+    if len(raw.encode("ascii", errors="ignore")) < 32:
+        raise ValueError("Bearer token must contain at least 32 ASCII bytes.")
+    if not BEARER_TOKEN_PATTERN.fullmatch(raw):
+        raise ValueError("Bearer token contains characters that are unsafe in an HTTP header.")
+    return raw
+
+
 class BearerTokenVerifier:
     def __init__(self, token: str) -> None:
         if len(token.encode("ascii", errors="ignore")) < 32:
@@ -24,15 +39,7 @@ class BearerTokenVerifier:
 
     @classmethod
     def from_file(cls, path: Path) -> "BearerTokenVerifier":
-        try:
-            raw = path.read_text(encoding="ascii")
-        except (OSError, UnicodeError) as exc:
-            raise RuntimeError(f"Bearer token secret is unavailable: {path}") from exc
-        if raw != raw.strip() or "\n" in raw or "\r" in raw:
-            raise ValueError(
-                "Bearer token secret must contain exactly one token without whitespace."
-            )
-        return cls(raw)
+        return cls(read_bearer_token(path))
 
     def accepts(self, authorization: str | None) -> bool:
         if authorization is None:
