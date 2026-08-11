@@ -1,74 +1,118 @@
-# Public IP deployment
+# Production deployment behind external Caddy
 
-This deployment keeps TLS termination on the host and runs only the API and
-vLLM in Docker. The API binds to `127.0.0.1:8000`; vLLM is reachable only on
-the Compose network.
+MonkeyOCR runs as a private backend. A separate Caddy entry server owns the
+public IP, TLS certificates, public routing, and edge traffic policy.
+
+```text
+Internet
+  -> Caddy entry server :443
+  -> private network
+  -> OCR host private IP :8000 (authenticated API)
+  -> Compose network :8888 (vLLM, never published on the host)
+```
+
+The application remains the final authentication authority: every public
+`/api/v1` request, including artifact downloads, requires the single Bearer
+token stored on the OCR host. Caddy must not replace or remove the client's
+`Authorization` header.
+
+## Ownership boundary
+
+This repository owns:
+
+- the API and vLLM containers;
+- the private API host binding;
+- model and result mounts;
+- the Bearer token and application request limits;
+- internal liveness and readiness endpoints.
+
+The entry-server deployment owns:
+
+- the public IP and HTTPS certificate lifecycle;
+- public Caddy configuration;
+- routing from `/api/v1/*` to the OCR host;
+- public rate limiting, connection limiting, access logs, and alerts;
+- any private overlay network used between the two servers.
+
+No Nginx, Certbot, or ACME lifecycle is installed by this repository.
 
 ## Prerequisites
 
-- Linux x86_64 with an Ampere/Ada NVIDIA GPU, a compatible 550-series or newer
-  driver, Docker, Docker Compose, and the NVIDIA Container Toolkit. Production
-  containers use the CUDA 12.8 wheel/toolkit stack through CUDA 12.x
-  minor-version compatibility.
-- The public IPv4 or IPv6 address routed directly to the server.
-- Firewall ingress for TCP 80 and 443. Do not expose 8000 or 8888.
-- Nginx, curl, `envsubst`, OpenSSL, and Certbot 5.4 or newer on the host. The
-  Certbot Nginx installer does not issue IP certificates; this repository uses
-  `certonly --webroot --ip-address`.
-- A proxy listening on host port 9090 when the default build proxy values are
-  retained for a local image build. Clear them when using no proxy or a
-  prebuilt GHCR image.
+- An OCR host with Linux x86_64, Docker Compose, the NVIDIA Container Toolkit,
+  an Ampere/Ada NVIDIA GPU, and a compatible 550-series or newer driver.
+- A Caddy entry server with private network reachability to the OCR host.
+- An exact private IPv4 address on the OCR host to which Docker can bind.
+- A host firewall and cloud security group that allow the selected API port
+  only from the Caddy server's private IP.
+- A protected private link. If the ordinary private network is not trusted,
+  use WireGuard, Tailscale, or another encrypted overlay; plain HTTP exposes
+  the Bearer token to anyone able to observe that link.
 
-On Ubuntu, install Nginx and `envsubst` from apt, then install a current Certbot
-release (for example with the official snap). Confirm `certbot --version`
-reports at least 5.4 before continuing.
+The production containers use the CUDA 12.8 wheel/toolkit stack through CUDA
+12.x minor-version compatibility. The vLLM container alone retains the
+toolchain required for runtime kernel JIT.
 
-## Initialize and configure
+## Initialize the OCR host
 
 ```bash
 scripts/compose.sh init
 ```
 
-Edit these ignored files:
+This creates ignored runtime configuration from the tracked examples and
+generates a mode-0600 token at
+`dotenv/secrets/monkeyocr_api_token`. Configure these files:
 
-- `dotenv/.env.compose`: host paths, UID/GID, exposed loopback port, Standard
-  profile, and the optional API/vLLM prebuilt image references.
-- `dotenv/.env.api`: API limits and model/vLLM locations inside containers.
-- `dotenv/.env.vllm`: Standard vLLM scheduling and model path.
-- `dotenv/.env.build`: build proxy and Python index. The supplied proxy URLs
-  already use `host.docker.internal`; no wrapper conversion is performed.
-- `dotenv/.env.nginx`: real public IP, ACME email, webroot, API upstream, and
-  whether the installer manages or preserves the HTTP default server.
+- `dotenv/.env.compose`: private host binding, host paths, UID/GID, profile,
+  and optional immutable image references;
+- `dotenv/.env.api`: container-side API limits and vLLM/model locations;
+- `dotenv/.env.vllm`: vLLM model and scheduling settings;
+- `dotenv/.env.build`: build-only proxy and Python index settings.
 
-The local Bearer token is generated without a trailing newline at
-`dotenv/secrets/monkeyocr_api_token` with mode 0600. On a server, keep this file
-owned by the UID configured in `dotenv/.env.compose` so the non-root API
-container can read the Compose secret.
+For example, if the OCR host is `10.0.0.20` and Caddy should connect to port
+`6000`, set:
 
-Place model directories below the configured model root. The default layout is:
+```dotenv
+# dotenv/.env.compose
+MONKEYOCR_API_BIND_ADDRESS=10.0.0.20
+MONKEYOCR_API_HOST_PORT=6000
+```
+
+Keep the container listener unchanged:
+
+```dotenv
+# dotenv/.env.api
+MONKEYOCR_API_HOST=0.0.0.0
+MONKEYOCR_API_PORT=8000
+```
+
+`MONKEYOCR_API_HOST_PORT` selects the OCR host port; it does not change the
+port inside the API container. Never use `0.0.0.0` as the host binding unless
+the host has no stable private address and an independently verified firewall
+provides the same isolation.
+
+Keep the token file owned by the UID configured in `.env.compose` so the
+non-root API container can read the Compose secret.
+
+## Download model weights
+
+The model download command uses the research extra because model-hub clients
+are intentionally excluded from the production images:
+
+```bash
+uv run --no-dev --extra research monkeyocr-model -n MonkeyOCRv2-B-Parsing
+```
+
+The default layout is:
 
 ```text
 model_weight/
 └── MonkeyOCRv2-B-Parsing/
 ```
 
-## Start the GPU services from GHCR
+## Pull and start immutable images
 
-The `Publish production image` workflow at
-`.github/workflows/publish-image.yml` runs for relevant pushes to `main`,
-version tags, and manual dispatches. It builds separate Standard API and vLLM
-images on GitHub Actions and publishes these GHCR tags:
-
-```text
-ghcr.io/l1ndenbaum/monkey-ocr-v2:api-standard
-ghcr.io/l1ndenbaum/monkey-ocr-v2:api-standard-sha-<full-git-sha>
-ghcr.io/l1ndenbaum/monkey-ocr-v2:vllm-standard
-ghcr.io/l1ndenbaum/monkey-ocr-v2:vllm-standard-sha-<full-git-sha>
-```
-
-The moving `standard` tag remains a compatibility alias for the vLLM image.
-For production, open both completed matrix-job summaries, copy their digests,
-and set immutable references in `dotenv/.env.compose`:
+For production, copy the API and vLLM digests from their completed GitHub
+Actions matrix-job summaries and set both references:
 
 ```dotenv
 MONKEYOCR_PROFILE=standard
@@ -76,18 +120,8 @@ MONKEYOCR_API_IMAGE=ghcr.io/l1ndenbaum/monkey-ocr-v2@sha256:<api-digest>
 MONKEYOCR_VLLM_IMAGE=ghcr.io/l1ndenbaum/monkey-ocr-v2@sha256:<vllm-digest>
 ```
 
-GHCR permits anonymous pulls only after the package visibility is changed to
-public. If the package remains private, create a classic personal access token
-with only `read:packages`, then log in without placing it on the command line:
-
-```bash
-read -rsp "GHCR token: " GHCR_TOKEN
-echo
-printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u L1ndenbaum --password-stdin
-unset GHCR_TOKEN
-```
-
-Pull and start both immutable service images:
+Use `@sha256:...` for a digest, not `:sha256:...`. If GHCR is private, first
+log in with a token having only `read:packages`.
 
 ```bash
 scripts/compose.sh config --quiet
@@ -97,156 +131,101 @@ scripts/compose.sh ps
 scripts/compose.sh logs -f vllm api
 ```
 
-Docker Hub registry mirrors do not accelerate `ghcr.io`; the Docker daemon
-must be able to reach GHCR directly or through its own pull proxy. The settings
-in `dotenv/.env.build` apply only to Dockerfile build steps.
+Docker Hub registry mirrors do not accelerate `ghcr.io`. Build proxy settings
+in `.env.build` affect Dockerfile steps only, not daemon image pulls.
 
-To roll forward or back, change the affected service digest and repeat `pull`
-and `up -d --no-build --force-recreate`. Keep the previous pair of digests
-until an authenticated real OCR request succeeds.
+## Verify the private backend
 
-## Build the GPU services locally
-
-Leave `MONKEYOCR_API_IMAGE`, `MONKEYOCR_VLLM_IMAGE`, and the deprecated
-`MONKEYOCR_IMAGE` fallback empty to use the local target image names, then run:
+Run these checks on the OCR host using its configured private binding and host
+port:
 
 ```bash
-scripts/compose.sh config --quiet
-scripts/compose.sh build
-scripts/compose.sh up -d
-scripts/compose.sh ps
-scripts/compose.sh logs -f vllm api
-```
+OCR_PRIVATE_URL=http://10.0.0.20:6000
 
-The API image uses the CUDA 12.8 runtime base and excludes vLLM. The vLLM
-image keeps the CUDA 12.8 devel toolchain for runtime kernel JIT. Each image
-installs its complete frozen environment without deleting or reconstructing
-Python distributions; cuDNN is supplied by PyTorch rather than the NVIDIA
-`cudnn-devel` base.
-
-Verify the loopback API before enabling the public proxy:
-
-```bash
-curl -fsS http://127.0.0.1:8000/internal/health/ready
+curl -fsS "$OCR_PRIVATE_URL/internal/health/ready"
 
 TOKEN=$(<dotenv/secrets/monkeyocr_api_token)
 curl -fsS \
   -H "Authorization: Bearer $TOKEN" \
   -F "file=@/path/to/test.png" \
-  http://127.0.0.1:8000/api/v1/ocr/text
+  "$OCR_PRIVATE_URL/api/v1/ocr/text"
 ```
 
-The first health endpoint is intentionally internal. Nginx never proxies it.
+Also test the readiness URL from the Caddy host. It should be reachable over
+the private link but must not be publicly routed. Confirm from an unrelated
+private host that the API port is rejected by the OCR host firewall.
 
-## Obtain the IP certificate and install the host proxy
+## Configure the external Caddy server
 
-Keep port 80 reachable: IP certificates use HTTP-01 and must be renewed
-frequently. Choose one of the following HTTP ownership modes before running the
-installer.
+The Caddyfile belongs on the entry server or in its own infrastructure
+repository. A minimal route boundary is:
 
-### Let MonkeyOCR manage HTTP and HTTPS
+```caddyfile
+https://203.0.113.10 {
+    handle /api/v1/* {
+        request_body {
+            max_size 50MB
+        }
 
-Use this mode on a dedicated host where MonkeyOCR may own both default servers:
+        reverse_proxy http://10.0.0.20:6000 {
+            health_uri /internal/health/ready
+            health_interval 30s
+            health_timeout 5s
+        }
+    }
 
-```dotenv
-MONKEYOCR_HTTP_MODE=managed
-MONKEYOCR_REPLACE_DEFAULT_SERVER=true
-```
-
-The installer temporarily loads an HTTP-only default server for the challenge,
-then replaces it with the HTTP redirect and HTTPS proxy after issuance.
-
-### Preserve an existing HTTP default server
-
-Use this mode when another application, such as KGraph, already owns port 80:
-
-```dotenv
-MONKEYOCR_HTTP_MODE=preserve
-MONKEYOCR_REPLACE_DEFAULT_SERVER=false
-```
-
-Add this location to the existing port-80 default `server` without changing its
-other locations:
-
-```nginx
-location ^~ /.well-known/acme-challenge/ {
-    root /var/www/monkeyocr-acme;
-    default_type text/plain;
-    try_files $uri =404;
+    handle {
+        respond 404
+    }
 }
 ```
 
-The `root` must equal `MONKEYOCR_ACME_WEBROOT`. Preserve mode reloads the
-existing valid Nginx configuration and checks the route with a random local
-challenge file before contacting the ACME service. It never creates a port-80
-listener or redirects the existing HTTP site's traffic. Port 443 must remain
-available for MonkeyOCR's HTTPS default server.
+Replace both example addresses. This routes only the versioned public API;
+active health checks use the private upstream directly. Standard Caddy
+`reverse_proxy` behavior retains incoming headers, including `Authorization`;
+if the entry deployment defines `header_up`, verify that it does not delete or
+overwrite that header. See the
+[Caddy reverse proxy documentation](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy).
 
-### Run the installer
-
-After editing `dotenv/.env.nginx`, run:
-
-```bash
-sudo scripts/install-host-nginx.sh
-```
-
-For a first dry run, set `MONKEYOCR_ACME_STAGING=true`; the resulting
-certificate is deliberately untrusted. Set it back to `false` and rerun for
-the production certificate.
-
-In managed mode, the installer performs this sequence:
-
-1. Validates the IP and Certbot version.
-2. Installs an HTTP-only default server that exposes only the ACME webroot.
-3. Requests a `shortlived` IP certificate with Certbot webroot mode.
-4. Replaces the bootstrap site with the HTTPS reverse proxy.
-5. Installs and starts `monkeyocr-cert-renew.timer`.
-
-In preserve mode, step 2 is replaced by validation of the existing HTTP
-server, and step 4 installs the HTTPS-only template. Certificate renewal still
-uses the shared webroot and does not replace the existing HTTP site.
-
-Direct-IP TLS has no domain fallback. The Nginx TLS listener is therefore the
-default server and always presents the IP certificate, including when a client
-does not send useful SNI. If the public IP changes, update `.env.nginx`, obtain
-a new certificate for the new literal address, and update clients.
+Apply rate and connection limits at Caddy, its WAF, or the surrounding edge
+platform according to that server's installed modules. The API independently
+enforces its 50 MiB upload limit, PDF page limit, and global OCR concurrency
+limit.
 
 ## Verify the public boundary
 
 ```bash
+PUBLIC_BASE_URL=https://203.0.113.10
 TOKEN=$(<dotenv/secrets/monkeyocr_api_token)
 
-curl -i "https://PUBLIC_IP/api/v1/parse"
+curl -i -X POST "$PUBLIC_BASE_URL/api/v1/parse"
 curl -fsS \
   -H "Authorization: Bearer $TOKEN" \
   -F "file=@/path/to/test.png" \
-  "https://PUBLIC_IP/api/v1/ocr/text"
-
-curl -fsS "https://PUBLIC_IP/internal/health/ready" || true
-curl -fsS "http://PUBLIC_IP/"
+  "$PUBLIC_BASE_URL/api/v1/ocr/text"
+curl -i "$PUBLIC_BASE_URL/internal/health/ready"
 ```
 
-The first request must return 401 with `WWW-Authenticate: Bearer`; the second
-must return an envelope with `internal_code=SUCCESS`; the health request must
-not be publicly routed. In preserve mode, the final HTTP request must still
-return the existing site's content.
+The unauthenticated API request must return HTTP 401 with
+`WWW-Authenticate: Bearer`; the authenticated OCR request must succeed; the
+public health request must return 404.
 
-## Renewal and alert checks
+## Apply this configuration-only change
 
-Let’s Encrypt IP certificates are valid for roughly six days. The installed
-timer runs every 12 hours with randomized delay:
+Changing the host binding does not require a new image. After updating the
+repository and `.env.compose`, recreate the API container so Docker replaces
+the published port:
 
 ```bash
-systemctl status monkeyocr-cert-renew.timer
-sudo systemctl start monkeyocr-cert-renew.service
-journalctl -u monkeyocr-cert-renew.service -n 100 --no-pager
-sudo certbot certificates
+git pull --ff-only
+scripts/compose.sh config --quiet
+scripts/compose.sh up -d --no-build --force-recreate api
+scripts/compose.sh ps
 ```
 
-After renewal, Certbot tests and reloads Nginx. The renewal script exits with a
-failure and writes a critical syslog message if the certificate has less than
-48 hours remaining; connect systemd failures or syslog critical events to the
-server's existing alert channel.
+Because `api` depends on the healthy vLLM service, Compose will verify that
+dependency without rebuilding or repulling either image. Update and reload the
+Caddy configuration separately on the entry server.
 
 ## Rotate the Bearer token
 
@@ -258,19 +237,19 @@ scripts/compose.sh restart api
 ```
 
 The API reads the token once at startup and fails closed if the secret is
-missing, short, malformed, or unreadable. Rotating it invalidates the previous
+missing, short, malformed, or unreadable. Rotation invalidates the previous
 token after the API restart.
 
-## Host proxy rollback
+## Rollback
 
-In managed mode, the installer preserves Debian's default-site symlink as
-`/etc/nginx/sites-enabled/default.disabled-by-monkeyocr` when replacement is
-enabled. To remove the MonkeyOCR host proxy, disable its timer, remove the
-MonkeyOCR site symlink, restore that default symlink if needed, then run
-`nginx -t` before reloading Nginx. In preserve mode there is no default-site
-backup to restore; remove only the MonkeyOCR HTTPS site and, when the
-certificate is no longer needed, the ACME location from the existing HTTP
-site. Container rollback is independent:
+To make the backend local-only again, set:
+
+```dotenv
+MONKEYOCR_API_BIND_ADDRESS=127.0.0.1
+```
+
+Then recreate only the API container with `--no-build --force-recreate api`.
+Container shutdown remains independent of the external entrypoint:
 
 ```bash
 scripts/compose.sh down

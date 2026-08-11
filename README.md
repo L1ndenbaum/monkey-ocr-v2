@@ -217,7 +217,7 @@ After processing and compression, downloading the dataset currently requires app
   </tbody>
 </table>
 
-## Public OCR Service Quick Start
+## OCR Service Quick Start
 
 This fork packages MonkeyOCRv2 as a single bounded context with a layer-first
 DDD structure under `src/monkeyocr`:
@@ -230,15 +230,18 @@ src/monkeyocr/
 └── interface/       # HTTP v1, CLI, and optional demo entrypoints
 ```
 
-The public deployment is two GPU containers behind a host Nginx process:
+The production deployment keeps the public entrypoint on a separate Caddy
+server and runs two GPU containers on the private OCR host:
 
 ```text
-Internet -> Nginx :443 -> 127.0.0.1:8000 API -> internal vLLM :8888
+Internet -> Caddy :443 -> private network -> OCR API :8000 -> internal vLLM :8888
 ```
 
-The API port is never bound publicly, vLLM has no host port, and every
-`/api/v1` request (including artifact downloads) requires the one configured
-Bearer token.
+Bind the API to the OCR host's exact private address and allow that port only
+from the Caddy host. vLLM has no host port, and every `/api/v1` request
+(including artifact downloads) requires the one configured Bearer token.
+TLS, public routing, and edge traffic controls belong to the Caddy deployment,
+not this repository.
 
 ### 1. Initialize local configuration
 
@@ -268,7 +271,9 @@ Clear both proxy values on a server that has no proxy listening on host port
 proxy settings.
 
 Edit `dotenv/.env.compose`, `dotenv/.env.api`, and `dotenv/.env.vllm` for the
-server before building.
+server before building. Keep `MONKEYOCR_API_PORT=8000` in `.env.api`; the host
+binding is controlled separately by `MONKEYOCR_API_BIND_ADDRESS` and
+`MONKEYOCR_API_HOST_PORT` in `.env.compose`.
 
 ### 2. Download model weights
 
@@ -334,7 +339,8 @@ The API target uses pinned CUDA 12.8 `runtime`; vLLM uses pinned CUDA 12.8
 PyTorch wheel rather than a `cudnn-devel` base. Each target installs its
 complete frozen dependency environment directly; apt metadata, uv's managed
 Python download, and wheel downloads use BuildKit cache mounts. The API is
-available only at `127.0.0.1:8000` until host Nginx is installed.
+available at `127.0.0.1:8000` by default. Production should bind it to the OCR
+host's exact private IP for access from the separate Caddy server.
 
 ### 4. Call the authenticated API
 
@@ -372,29 +378,23 @@ pages, admits four OCR requests at once (excess requests receive HTTP 429), and
 expires result workspaces after six hours. `/static` and the old unversioned
 routes do not exist.
 
-### 5. Enable HTTPS on a public IP
+### 5. Connect the external Caddy entrypoint
 
-Let’s Encrypt IP certificates require Certbot 5.4 or newer, the `shortlived`
-profile, and a reachable HTTP-01 challenge on port 80. Edit
-`dotenv/.env.nginx`, then run on the server:
+On the OCR host, bind only to its private address, for example:
 
-```bash
-sudo scripts/install-host-nginx.sh
+```dotenv
+MONKEYOCR_API_BIND_ADDRESS=10.0.0.20
+MONKEYOCR_API_HOST_PORT=8000
 ```
 
-`MONKEYOCR_HTTP_MODE=managed` lets the installer own both ports 80 and 443. If
-another application already owns the HTTP default server, set
-`MONKEYOCR_HTTP_MODE=preserve`, add the documented ACME challenge location to
-that existing server, and leave its other locations unchanged. Preserve mode
-verifies the shared challenge path and installs only the MonkeyOCR HTTPS
-default server, so the existing HTTP application remains available.
+Allow TCP 8000 only from the Caddy host's private IP. On the Caddy server,
+route only `/api/v1/*` to `http://10.0.0.20:8000`; keep
+`/internal/health/*` unavailable to public clients. Caddy must preserve the
+client's `Authorization` header so the API remains the final authentication
+authority.
 
-The final proxy exposes only `/api/v1`, applies a 50 MiB body limit, four
-connections per source IP, and a 10 requests/minute rate limit. A systemd timer
-renews the roughly six-day certificate every 12 hours, reloads Nginx after a
-successful renewal, and fails loudly if fewer than 48 hours remain.
-
-See `docs/deployment.md` for prerequisites, verification, and renewal checks.
+See `docs/deployment.md` for a Caddy example, firewall boundary, validation,
+and token rotation.
 
 ### Local CLI and research capabilities
 

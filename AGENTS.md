@@ -58,6 +58,6 @@ git diff --check
 ```
 
 Fix every failure before committing. Infrastructure-only changes also require
-their targeted validation (for example `docker compose config`, Docker build
-checks, or `nginx -t`) when the necessary tool is available. Commit only after
-the required checks pass.
+their targeted validation (for example `docker compose config` or Docker build
+checks) when the necessary tool is available. Commit only after the required
+checks pass.

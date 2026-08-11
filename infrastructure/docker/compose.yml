@@ -76,7 +76,10 @@ services:
       vllm:
         condition: service_healthy
     ports:
-      - 127.0.0.1:${MONKEYOCR_API_HOST_PORT:-8000}:8000
+      - target: 8000
+        published: "${MONKEYOCR_API_HOST_PORT:-8000}"
+        host_ip: ${MONKEYOCR_API_BIND_ADDRESS:-127.0.0.1}
+        protocol: tcp
     volumes:
       - ${MONKEYOCR_MODEL_ROOT:-./model_weight}:/models:ro
       - ${MONKEYOCR_RESULTS_ROOT:-./output/api}:/var/lib/monkeyocr/results
