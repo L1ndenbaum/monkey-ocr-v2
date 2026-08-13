@@ -16,26 +16,31 @@ interface MediaPreviewProps {
 }
 
 export function MediaPreview({ file, mode, onSelection }: MediaPreviewProps) {
-  const [objectUrl] = useState(() => URL.createObjectURL(file))
-
-  useEffect(() => {
-    return () => URL.revokeObjectURL(objectUrl)
-  }, [objectUrl])
-
   if (
     file.type === 'application/pdf' ||
     file.name.toLowerCase().endsWith('.pdf')
   ) {
+    // 直接传 File，避免 PDF.js 把 blob URL 当作网络资源并触发 CSP。
     return (
       <PdfPreview
-        key={`${objectUrl}-${mode}`}
-        fileUrl={objectUrl}
+        file={file}
         filename={file.name}
         mode={mode}
         onSelection={onSelection}
       />
     )
   }
+
+  return <ImagePreview file={file} mode={mode} onSelection={onSelection} />
+}
+
+function ImagePreview({ file, mode, onSelection }: MediaPreviewProps) {
+  const [objectUrl] = useState(() => URL.createObjectURL(file))
+
+  useEffect(() => {
+    return () => URL.revokeObjectURL(objectUrl)
+  }, [objectUrl])
+
   if (mode === 'parse') {
     return (
       <img src={objectUrl} alt="上传文件预览" className="document-preview" />
@@ -51,13 +56,13 @@ export function MediaPreview({ file, mode, onSelection }: MediaPreviewProps) {
 }
 
 interface PdfPreviewProps {
-  fileUrl: string
+  file: File
   filename: string
   mode: OcrMode
   onSelection: (file: File | null) => void
 }
 
-function PdfPreview({ fileUrl, filename, mode, onSelection }: PdfPreviewProps) {
+function PdfPreview({ file, filename, mode, onSelection }: PdfPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const [pageNumber, setPageNumber] = useState(1)
   const [pageCount, setPageCount] = useState(0)
@@ -79,7 +84,7 @@ function PdfPreview({ fileUrl, filename, mode, onSelection }: PdfPreviewProps) {
   return (
     <Flex direction="column" gap="3" width="100%" align="center">
       <Document
-        file={fileUrl}
+        file={file}
         onLoadSuccess={({ numPages }) => {
           setPageCount(numPages)
           setError(null)
@@ -101,7 +106,7 @@ function PdfPreview({ fileUrl, filename, mode, onSelection }: PdfPreviewProps) {
       </Document>
       {mode !== 'parse' && snapshot ? (
         <CropImage
-          key={`${fileUrl}-${pageNumber}`}
+          key={`${file.name}-${file.lastModified}-${pageNumber}`}
           source={snapshot}
           filename={filename}
           onSelection={onSelection}
