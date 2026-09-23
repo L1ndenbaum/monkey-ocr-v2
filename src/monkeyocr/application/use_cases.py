@@ -20,6 +20,15 @@ class ParseDocument:
         )
 
 
+class ParseMarkdown:
+    def __init__(self, pipeline: OcrPipeline) -> None:
+        self._pipeline = pipeline
+
+    def execute(self, command: ParseDocumentCommand) -> str:
+        classify_media(command.input_path.suffix)
+        return self._pipeline.parse_markdown(command.input_path, command.output_dir)
+
+
 class RecognizeImage:
     def __init__(self, pipeline: OcrPipeline) -> None:
         self._pipeline = pipeline

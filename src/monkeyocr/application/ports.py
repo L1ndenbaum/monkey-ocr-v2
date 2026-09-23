@@ -17,6 +17,10 @@ class OcrPipeline(Protocol):
         """Parse one document and return artifact name plus relative output files."""
         ...
 
+    def parse_markdown(self, input_path: Path, output_dir: Path) -> str:
+        """Parse one document and return text-only Markdown without an archive."""
+        ...
+
     def recognize(self, input_path: Path, output_dir: Path, task: OcrTask) -> str:
         """Recognize one image for a specialized OCR task."""
         ...

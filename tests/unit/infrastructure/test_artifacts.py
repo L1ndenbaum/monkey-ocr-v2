@@ -6,6 +6,7 @@ import pytest
 from monkeyocr.domain.errors import ArtifactNotFoundError
 from monkeyocr.infrastructure.storage.artifacts import (
     ArtifactStore,
+    load_text_markdown,
     make_artifact_filename,
     zip_dir,
 )
@@ -16,6 +17,25 @@ def test_artifact_filename_respects_utf8_byte_limit() -> None:
 
     assert len(filename.encode()) <= 255
     assert filename.endswith("_results.zip")
+
+
+def test_text_markdown_omits_parser_picture_references(tmp_path: Path) -> None:
+    (tmp_path / "a.md").write_text(
+        "# Title\n\n![image](../images/a_sub0.jpg)\n\nUseful text\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "b.md").write_text(
+        "![image](data:image/png;base64,YWJj)\n\n## More text\n",
+        encoding="utf-8",
+    )
+
+    result = load_text_markdown(tmp_path)
+
+    assert "# Title" in result
+    assert "Useful text" in result
+    assert "## More text" in result
+    assert "![image]" not in result
+    assert "data:image" not in result
 
 
 def test_artifact_store_rejects_path_traversal(tmp_path: Path) -> None:

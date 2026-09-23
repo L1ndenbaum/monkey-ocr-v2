@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from monkeyocr.application.commands import ParseDocumentCommand, RecognizeImageCommand
-from monkeyocr.application.use_cases import ParseDocument, RecognizeImage
+from monkeyocr.application.use_cases import ParseDocument, ParseMarkdown, RecognizeImage
 from monkeyocr.domain.errors import UnsupportedMediaTypeError
 from monkeyocr.domain.tasks import OcrTask
 
@@ -13,6 +13,11 @@ class FakePipeline:
         assert input_path == Path("input.pdf")
         assert output_dir == Path("results/request-1")
         return "input_results.zip", ("input.md", "input.json")
+
+    def parse_markdown(self, input_path: Path, output_dir: Path) -> str:
+        assert input_path == Path("input.pdf")
+        assert output_dir == Path("results/request-1")
+        return "# Parsed text"
 
     def recognize(self, input_path: Path, output_dir: Path, task: OcrTask) -> str:
         assert input_path == Path("formula.png")
@@ -33,6 +38,18 @@ def test_parse_document_maps_pipeline_result() -> None:
     assert result.request_id == "request-1"
     assert result.artifact_name == "input_results.zip"
     assert result.files == ("input.md", "input.json")
+
+
+def test_parse_markdown_returns_pipeline_text() -> None:
+    result = ParseMarkdown(FakePipeline()).execute(
+        ParseDocumentCommand(
+            request_id="request-1",
+            input_path=Path("input.pdf"),
+            output_dir=Path("results/request-1"),
+        )
+    )
+
+    assert result == "# Parsed text"
 
 
 def test_recognize_image_rejects_pdf() -> None:

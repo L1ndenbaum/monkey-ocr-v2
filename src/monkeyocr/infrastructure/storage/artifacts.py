@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 import shutil
 import time
 import zipfile
@@ -40,6 +41,17 @@ def load_all_results(out_dir: str | Path) -> object:
 
 def load_markdowns(md_dir: str | Path) -> list[str]:
     return [path.read_text(encoding="utf-8") for path in sorted(Path(md_dir).glob("*.md"))]
+
+
+_PICTURE_REFERENCE = re.compile(
+    r"(?m)^[ \t]*!\[image\]\((?:\.\./images/[^)\r\n]+|data:image/[^)\r\n]+)\)[ \t]*$"
+)
+
+
+def load_text_markdown(md_dir: str | Path) -> str:
+    """Join parser Markdown while removing references to images we do not return."""
+    sections = [_PICTURE_REFERENCE.sub("", markdown).strip() for markdown in load_markdowns(md_dir)]
+    return "\n\n".join(section for section in sections if section)
 
 
 def zip_dir(src_dir: str | Path, zip_path: str | Path) -> None:

@@ -6,7 +6,11 @@ from typing import Any
 from monkeyocr.domain.tasks import OcrTask
 from monkeyocr.infrastructure.pipeline.config import BackendConfig, PipelineConfig
 from monkeyocr.infrastructure.pipeline.runner import BackendManager, ServicePipelinePool
-from monkeyocr.infrastructure.storage.artifacts import make_artifact_filename, zip_dir
+from monkeyocr.infrastructure.storage.artifacts import (
+    load_text_markdown,
+    make_artifact_filename,
+    zip_dir,
+)
 
 
 class MonkeyOcrPipelineAdapter:
@@ -41,19 +45,7 @@ class MonkeyOcrPipelineAdapter:
         )
 
     def parse(self, input_path: Path, output_dir: Path) -> tuple[str, tuple[str, ...]]:
-        self._pool.run(
-            PipelineConfig(
-                input_path=str(input_path),
-                output_path=str(output_dir),
-                backend=self._backend_config,
-                page_max_inflight=self._page_max_inflight,
-                end2end=self._end2end,
-                retry_repeat=self._retry_repeat,
-                keep_header_footer=self._keep_header_footer,
-                use_base64=self._use_base64,
-                verbose=False,
-            )
-        )
+        self._run_parse(input_path, output_dir, use_base64=self._use_base64)
         artifact_name = make_artifact_filename(input_path.stem, "_results.zip")
         zip_dir(output_dir, output_dir / artifact_name)
         files = tuple(
@@ -64,6 +56,26 @@ class MonkeyOcrPipelineAdapter:
             )
         )
         return artifact_name, files
+
+    def parse_markdown(self, input_path: Path, output_dir: Path) -> str:
+        # This result cannot carry image assets, even if the archive API uses base64.
+        self._run_parse(input_path, output_dir, use_base64=False)
+        return load_text_markdown(output_dir / "markdowns")
+
+    def _run_parse(self, input_path: Path, output_dir: Path, *, use_base64: bool) -> None:
+        self._pool.run(
+            PipelineConfig(
+                input_path=str(input_path),
+                output_path=str(output_dir),
+                backend=self._backend_config,
+                page_max_inflight=self._page_max_inflight,
+                end2end=self._end2end,
+                retry_repeat=self._retry_repeat,
+                keep_header_footer=self._keep_header_footer,
+                use_base64=use_base64,
+                verbose=False,
+            )
+        )
 
     def recognize(self, input_path: Path, output_dir: Path, task: OcrTask) -> str:
         result: dict[str, Any] = self._pool.run_single_task(

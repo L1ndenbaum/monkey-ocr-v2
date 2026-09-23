@@ -364,6 +364,7 @@ curl -fsS \
 Public routes are:
 
 - `POST /api/v1/parse` for PDF or image parsing.
+- `POST /api/v1/parse/markdown` for text-only Markdown in the JSON envelope.
 - `POST /api/v1/ocr/{task}` where `task` is `text`, `formula`, or `table`.
 - `GET /api/v1/artifacts/{request_id}/download` for the protected ZIP.
 
@@ -387,6 +388,12 @@ JSON responses use one envelope:
   }
 }
 ```
+
+The Markdown route uses the same Bearer token, upload/page limits, and OCR
+capacity as `/parse`. Its `data` contains `request_id` and `markdown` only.
+Picture references are omitted because no image assets accompany this response;
+the temporary workspace is removed when the request completes. The original
+`/parse` route and ZIP download remain available for full results.
 
 The API streams uploads with an actual 50 MiB limit, accepts at most 50 PDF
 pages, admits four OCR requests at once (excess requests receive HTTP 429), and

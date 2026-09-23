@@ -2,26 +2,29 @@
 
 import asyncio
 import uuid
+from collections.abc import Callable
 from pathlib import Path
-from typing import Annotated, cast
+from typing import Annotated, TypeVar, cast
 
 from fastapi import APIRouter, File, Request, UploadFile
 from fastapi.responses import FileResponse
 
 from monkeyocr.application.commands import ParseDocumentCommand, RecognizeImageCommand
-from monkeyocr.application.use_cases import ParseDocument, RecognizeImage
+from monkeyocr.application.use_cases import ParseDocument, ParseMarkdown, RecognizeImage
 from monkeyocr.domain.errors import CapacityExceededError
 from monkeyocr.domain.tasks import OcrTask
 from monkeyocr.interface.http.runtime import HttpRuntime
 from monkeyocr.interface.http.schemas import (
     ApiEnvelope,
     InternalCode,
+    MarkdownData,
     ParseData,
     RecognitionData,
 )
 from monkeyocr.interface.http.uploads import save_bounded_upload, validate_pdf_page_limit
 
 router = APIRouter(prefix="/api/v1")
+T = TypeVar("T")
 
 
 def _runtime(request: Request) -> HttpRuntime:
@@ -39,14 +42,15 @@ async def _start_request(runtime: HttpRuntime) -> tuple[str, Path]:
         raise
 
 
-@router.post("/parse", response_model=ApiEnvelope[ParseData])
-async def parse_document(
-    request: Request,
-    file: Annotated[UploadFile, File()],
-) -> ApiEnvelope[ParseData]:
-    runtime = _runtime(request)
+async def _parse_uploaded_document(
+    runtime: HttpRuntime,
+    file: UploadFile,
+    execute: Callable[[ParseDocumentCommand], T],
+    *,
+    keep_workspace: bool,
+) -> tuple[str, T]:
     request_id, workspace = await _start_request(runtime)
-    keep_workspace = False
+    completed = False
     try:
         input_path = await save_bounded_upload(
             file,
@@ -56,24 +60,50 @@ async def parse_document(
         await validate_pdf_page_limit(input_path, runtime.settings.max_pdf_pages)
         command = ParseDocumentCommand(request_id, input_path, workspace)
         result = await asyncio.get_running_loop().run_in_executor(
-            runtime.executor,
-            ParseDocument(runtime.pipeline).execute,
-            command,
+            runtime.executor, execute, command
         )
-        keep_workspace = True
-        return ApiEnvelope(
-            internal_code=InternalCode.SUCCESS,
-            message="Document parsed successfully.",
-            data=ParseData(
-                request_id=result.request_id,
-                files=result.files,
-                artifact_download_url=f"/api/v1/artifacts/{request_id}/download",
-            ),
-        )
+        completed = True
+        return request_id, result
     finally:
-        if not keep_workspace:
+        if not completed or not keep_workspace:
             runtime.artifacts.remove_workspace(request_id)
         await runtime.admission.release()
+
+
+@router.post("/parse", response_model=ApiEnvelope[ParseData])
+async def parse_document(
+    request: Request,
+    file: Annotated[UploadFile, File()],
+) -> ApiEnvelope[ParseData]:
+    runtime = _runtime(request)
+    request_id, result = await _parse_uploaded_document(
+        runtime, file, ParseDocument(runtime.pipeline).execute, keep_workspace=True
+    )
+    return ApiEnvelope(
+        internal_code=InternalCode.SUCCESS,
+        message="Document parsed successfully.",
+        data=ParseData(
+            request_id=result.request_id,
+            files=result.files,
+            artifact_download_url=f"/api/v1/artifacts/{request_id}/download",
+        ),
+    )
+
+
+@router.post("/parse/markdown", response_model=ApiEnvelope[MarkdownData])
+async def parse_markdown(
+    request: Request,
+    file: Annotated[UploadFile, File()],
+) -> ApiEnvelope[MarkdownData]:
+    runtime = _runtime(request)
+    request_id, markdown = await _parse_uploaded_document(
+        runtime, file, ParseMarkdown(runtime.pipeline).execute, keep_workspace=False
+    )
+    return ApiEnvelope(
+        internal_code=InternalCode.SUCCESS,
+        message="Document parsed successfully.",
+        data=MarkdownData(request_id=request_id, markdown=markdown),
+    )
 
 
 @router.post("/ocr/{task}", response_model=ApiEnvelope[RecognitionData])

@@ -34,6 +34,11 @@ class ParseData(BaseModel):
     artifact_download_url: str
 
 
+class MarkdownData(BaseModel):
+    request_id: str
+    markdown: str
+
+
 class RecognitionData(BaseModel):
     request_id: str
     task: str
