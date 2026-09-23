@@ -2,27 +2,22 @@ name: Publish production images
 
 on:
   workflow_dispatch:
+    inputs:
+      target:
+        description: Image target to publish
+        required: true
+        type: choice
+        default: all
+        options:
+          - api
+          - vllm
+          - all
   push:
     branches:
       - main
+      - dev
     tags:
       - "v*"
-    paths:
-      - ".github/workflows/publish-image.yml"
-      - ".dockerignore"
-      - "infrastructure/docker/Dockerfile"
-      - "scripts/check_image_size.py"
-      - "src/**"
-      - "!src/monkeyocr/application/web_jobs.py"
-      - "!src/monkeyocr/infrastructure/config/web_settings.py"
-      - "!src/monkeyocr/infrastructure/http/**"
-      - "!src/monkeyocr/infrastructure/storage/web_jobs.py"
-      - "!src/monkeyocr/interface/cli/web.py"
-      - "!src/monkeyocr/interface/http/internal_web/**"
-      - "LICENSE"
-      - "README.md"
-      - "pyproject.toml"
-      - "uv.lock"
 
 concurrency:
   group: publish-standard-${{ github.ref }}
@@ -37,32 +32,37 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  detect:
+    name: Select image targets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+      has_targets: ${{ steps.select.outputs.has_targets }}
+    steps:
+      - name: Check out repository and push history
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Select image targets
+        id: select
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          REQUESTED_TARGET: ${{ inputs.target }}
+        run: python scripts/select_image_targets.py
+
   publish-standard:
     name: Build ${{ matrix.target }} standard image
+    needs: detect
+    if: needs.detect.outputs.has_targets == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - target: api
-            tag_prefix: api-standard
-            title: MonkeyOCRv2 authenticated API
-            description: Authenticated MonkeyOCRv2 API and preprocessing runtime
-            cache_primary: monkeyocr-api-standard
-            cache_secondary: monkeyocr-vllm-standard
-            max_total_gib: 8
-            base_reference: nvidia/cuda:12.8.1-runtime-ubuntu22.04@sha256:fcbbd60a5ad3db3a1c7375bf14546b369b54064c513224310b2026df50c7a9bd
-            legacy_standard: false
-          - target: vllm
-            tag_prefix: vllm-standard
-            title: MonkeyOCRv2 vLLM runtime
-            description: MonkeyOCRv2 Standard vLLM inference runtime
-            cache_primary: monkeyocr-vllm-standard
-            cache_secondary: monkeyocr-api-standard
-            max_total_gib: 12
-            base_reference: nvidia/cuda:12.8.1-devel-ubuntu22.04@sha256:6617a625f4090c76c545a0e7d63f2e441718ef9af7f4efe7dd1242a29e289fd7
-            legacy_standard: true
+      matrix: ${{ fromJSON(needs.detect.outputs.matrix) }}
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
